@@ -1,34 +1,43 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace CasesPlugin
-{
-    public class TicketFromForwardedMail : IPlugin
     {
-        public void Execute(IServiceProvider serviceProvider)
+        public class TicketFromForwardedMail : IPlugin
         {
-            IPluginExecutionContext context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
-            IOrganizationServiceFactory serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-            IOrganizationService service = serviceFactory.CreateOrganizationService(context.UserId);
-            ITracingService tracer = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
-
-            try
+            public void Execute(IServiceProvider serviceProvider)
             {
-                //if (context.MessageName != "Create" || !context.InputParameters.Contains("Target") || !(context.InputParameters["Target"] is Entity email))
-                //    return;
-                if (context.InputParameters.Contains("Target") && context.InputParameters["Target"] is Entity entity)
+                var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+                var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+                var service = factory.CreateOrganizationService(context.UserId);
+                var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
+
+                tracing.Trace("=== EmailToCasePlugin START ===");
+
+                try
                 {
-                    if (entity.Attributes.Contains("directioncode")) // 1 = Incoming
+                    if (!context.InputParameters.Contains("Target") || !(context.InputParameters["Target"] is EntityReference emailRef))
                     {
-                        // Check "from" field
-                        if (entity.Attributes.Contains("from"))
+                        tracing.Trace("Target not found or invalid.");
+                        return;
+                    }
+
+                    Guid emailId = emailRef.Id;
+
+                    var email = service.Retrieve("email", emailId, new ColumnSet(true));
+
+                    if (email.Attributes.Contains("directioncode"))
+                    {
+                        if (email.Attributes.Contains("from"))
                         {
-                            EntityCollection fromCollection = entity.GetAttributeValue<EntityCollection>("from");
+                            EntityCollection fromCollection = email.GetAttributeValue<EntityCollection>("from");
                             if (fromCollection != null && fromCollection.Entities.Count > 0)
                             {
                                 foreach (var activityParty in fromCollection.Entities)
@@ -39,65 +48,28 @@ namespace CasesPlugin
                                     if (!string.IsNullOrEmpty(senderEmail) &&
                                         senderEmail.Equals("no-reply@taadeen.sa", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        string plainTextBody = entity.GetAttributeValue<string>("description") ?? string.Empty;
-
+                                        string plainTextBody = email.GetAttributeValue<string>("description") ?? string.Empty;
                                         string body = StripHtml(plainTextBody);
+                                        string subject1 = email.GetAttributeValue<string>("subject");
 
-                                        string subject1 = entity.GetAttributeValue<string>("subject");
                                         if (subject1.ToLower() == "book an appointment" || subject1.ToLower() == "حجز موعد")
                                         {
-
-                                            //var note = new Entity("annotation")
-                                            //{
-                                            //    ["subject"] = "Email Processed",
-                                            //    ["notetext"] = "book an appointment consition.",
-
-                                            //};
-                                            //service.Create(note);
-
-
                                             EntityReference customerRef = null;
-                                            //string beneficiaryType = MatchValueForAppointment(body, @"Type of Beneficiary\s*\n(.+)");
-                                            //string idNumber = MatchValueForAppointment(body, @"ID Number\s*\n(.+)");
-                                            //string fullName = MatchValueForAppointment(body, @"Full Name\s*\n(.+)");
-                                            //string phone2 = MatchValueForAppointment(body, @"Phone Number\s*\n(.+)");
-                                            //string email1 = MatchValueForAppointment(body, @"Email Address\s*\n(.+)");
-                                            //string requestType2 = MatchValueForAppointment(body, @"Request Type\s*\n(.+)");
-                                            //string department = MatchValueForAppointment(body, @"Sector\s*\n(.+)");
-                                            //string reason = MatchValueForAppointment(body, @"Reason of this request\s*\n(.+)");
-
                                             string beneficiaryType = MatchValueForAppointment(body, @"(?:Type of Beneficiary|مقدم الطلب)\s*\n(.+)");
                                             string idNumber = MatchValueForAppointment(body, @"(?:ID Number|رقم الهوية)\s*\n(.+)");
-
                                             string companyName = MatchValueForAppointment(body, @"(?:Company Name|اسم الشركة)\s*\n(.+)");
                                             string CRN = MatchValueForAppointment(body, @"(?:Commercial Registration Number|رقم السجل التجاري)\s*\n(.+)");
-
                                             string fullName = MatchValueForAppointment(body, @"(?:Full Name|الإسم الثلاثي)\s*\n(.+)");
                                             string phone2 = MatchValueForAppointment(body, @"(?:Phone Number|رقم الهاتف)\s*\n(.+)").Replace("&#43;", "+");
                                             string email1 = MatchValueForAppointment(body, @"(?:Email Address|البريد الإلكتروني)\s*\n(.+)");
                                             if (string.IsNullOrWhiteSpace(email1))
-                                            {
-                                                return;  // stop plugin execution or skip further logic
-                                            }
+                                                return;
                                             string requestType2 = MatchValueForAppointment(body, @"(?:Request Type|نوع الموعد)\s*\n(.+)");
                                             string department = MatchValueForAppointment(body, @"(?:Sector|القطاع)\s*\n(.+)");
-                                            // string complianceType = MatchValueForAppointment(body, @"(?:Compliance|الامتثال)\s*\n(.+)");
-                                            string complianceType = MatchValueForAppointment(
-                                                         body,
-                                                         @"(?<=\r?\n\r?\n)(?:الامتثال|Compliance)\s*\r?\n\s*([^\r\n]+)"
-                                                     );
-                                            //string licenseType = MatchValueForAppointment(body, @"(?:Licenses|الرخص)\s*\n(.+)");                                                                                                          //  string licenseType = MatchValue(body, @"License Type)[^\r\n:]*[:\-]?\s*([^\(]+)").Trim();
-                                            //string licenseType = MatchValueForAppointment(body, @"(?:الرخص|License Type)\s*\r?\n\s*([^\r\n]+)");
-                                            string licenseType = MatchValueForAppointment(
-                                                        body,
-                                                        @"(?<=\r?\n\r?\n)(?:الرخص|Licenses)\s*\r?\n\s*([^\r\n]+)"
-                                                    );
-
-
-                                            string reason = MatchValueForAppointment(body, @"(?:Reason of this request|سبب حجز الموعد)\s*\n([\s\S]+)"); // Supports multiline
-
-
-
+                                            string complianceType = MatchValueForAppointment(body, @"(?<=\r?\n\r?\n)(?:الامتثال|Compliance)\s*\r?\n\s*([^\r\n]+)");
+                                            string licenseType = MatchValueForAppointment(body, @"(?<=\r?\n\r?\n)(?:الرخص|Licenses)\s*\r?\n\s*([^\r\n]+)");
+                                            string reason = MatchValueForAppointment(body, @"(?:Reason of this request|سبب حجز الموعد)\s*\n([\s\S]+)");
+                                            string normalizedValue = NormalizeInput(requestType2);
 
                                             if (beneficiaryType == "فرد" || beneficiaryType.ToLower() == "individual")
                                             {
@@ -106,9 +78,7 @@ namespace CasesPlugin
                                                     ColumnSet = new ColumnSet("contactid"),
                                                     Criteria = new FilterExpression
                                                     {
-                                                        Conditions = {
-                                                            new ConditionExpression("emailaddress1", ConditionOperator.Equal, email1)
-                                                        }
+                                                        Conditions = { new ConditionExpression("emailaddress1", ConditionOperator.Equal, email1) }
                                                     }
                                                 };
 
@@ -116,9 +86,7 @@ namespace CasesPlugin
                                                 Guid contactId;
 
                                                 if (result.Entities.Count > 0)
-                                                {
                                                     contactId = result.Entities[0].Id;
-                                                }
                                                 else
                                                 {
                                                     var contact = new Entity("contact")
@@ -126,32 +94,21 @@ namespace CasesPlugin
                                                         ["lastname"] = fullName,
                                                         ["emailaddress1"] = email1,
                                                         ["mobilephone"] = phone2,
-                                                        ["new_nationalidnumber"] = idNumber,
+                                                        ["new_nationalidnumber"] = idNumber
                                                     };
                                                     contactId = service.Create(contact);
                                                 }
 
                                                 customerRef = new EntityReference("contact", contactId);
                                             }
-                                            //investor
                                             else if (beneficiaryType == "شركة" || beneficiaryType.ToLower() == "company")
                                             {
-                                                //    var note1 = new Entity("annotation")
-                                                //    {
-                                                //        ["subject"] = "Email Processed",
-                                                //        ["notetext"] = "in elseif company consition.",
-
-                                                //    };
-                                                //    service.Create(note1);
-
                                                 var query = new QueryExpression("account")
                                                 {
                                                     ColumnSet = new ColumnSet("accountid"),
                                                     Criteria = new FilterExpression
                                                     {
-                                                        Conditions = {
-                                                            new ConditionExpression("name", ConditionOperator.Equal, companyName)
-                                                        }
+                                                        Conditions = { new ConditionExpression("name", ConditionOperator.Equal, companyName) }
                                                     }
                                                 };
 
@@ -159,9 +116,7 @@ namespace CasesPlugin
                                                 Guid accountId;
 
                                                 if (result.Entities.Count > 0)
-                                                {
                                                     accountId = result.Entities[0].Id;
-                                                }
                                                 else
                                                 {
                                                     var account = new Entity("account")
@@ -176,117 +131,118 @@ namespace CasesPlugin
                                                 }
 
                                                 customerRef = new EntityReference("account", accountId);
-                                                //var note2 = new Entity("annotation")
-                                                //{
-                                                //    ["subject"] = "Email Processed",
-                                                //    ["notetext"] = "in elseif company condition account created.",
-
-                                                //};
-                                                //service.Create(note2);
                                             }
                                             else
                                             {
-                                                Console.WriteLine("❌ Unsupported beneficiary type: " + beneficiaryType);
+                                                tracing.Trace("Unsupported beneficiary type: " + beneficiaryType);
                                                 return;
                                             }
+
+                                            EntityReference ticketTypeRef = GetTicketType(service, normalizedValue);
+                                            int beneficiaryValue = -1;
+                                            if (beneficiaryType.Equals("فرد", StringComparison.OrdinalIgnoreCase) ||
+                                                beneficiaryType.Equals("Individual", StringComparison.OrdinalIgnoreCase))
+                                                beneficiaryValue = 1;
+                                            else if (beneficiaryType.Equals("شركة", StringComparison.OrdinalIgnoreCase) ||
+                                                     beneficiaryType.Equals("Company", StringComparison.OrdinalIgnoreCase))
+                                                beneficiaryValue = 2;
+
+                                            int SectorValue = -1;
+                                            if (department.Equals("الرخص", StringComparison.OrdinalIgnoreCase) ||
+                                                department.Equals("Licensing", StringComparison.OrdinalIgnoreCase))
+                                                SectorValue = 1;
+                                            else if (department.Equals("تجربة العميل", StringComparison.OrdinalIgnoreCase) ||
+                                                     department.Equals("Customer Experience", StringComparison.OrdinalIgnoreCase))
+                                                SectorValue = 3;
+                                            else if (department.Equals("الإمتثال", StringComparison.OrdinalIgnoreCase) ||
+                                                    department.Equals("Compliance", StringComparison.OrdinalIgnoreCase))
+                                                SectorValue = 2;
+                                            else if (department.Equals("أخرى", StringComparison.OrdinalIgnoreCase) ||
+                                                    department.Equals("Other", StringComparison.OrdinalIgnoreCase))
+                                                SectorValue = 4;
+
+                                            int ComplianceValue = -1;
+                                            if (complianceType.Equals("الامتثال المالي", StringComparison.OrdinalIgnoreCase) ||
+                                                complianceType.Equals("Financial Compliance", StringComparison.OrdinalIgnoreCase))
+                                                ComplianceValue = 1;
+                                            else if (complianceType.Equals("الامتثال الرقابي", StringComparison.OrdinalIgnoreCase) ||
+                                                     complianceType.Equals("Regulatory Compliance", StringComparison.OrdinalIgnoreCase))
+                                                ComplianceValue = 2;
+                                            else if (complianceType.Equals("الاستدامة", StringComparison.OrdinalIgnoreCase) ||
+                                                    complianceType.Equals("Sustainability", StringComparison.OrdinalIgnoreCase))
+                                                ComplianceValue = 3;
+
+                                            int licenseTypeValue = -1;
+                                            if (licenseType.Equals("رخص الكشف والاستطلاع", StringComparison.OrdinalIgnoreCase) ||
+                                                licenseType.Equals("Exploration Licenses", StringComparison.OrdinalIgnoreCase))
+                                                licenseTypeValue = 1;
+                                            else if (licenseType.Equals("رخص محاجر مواد البناء", StringComparison.OrdinalIgnoreCase) ||
+                                                     licenseType.Equals("BMQ Licenses", StringComparison.OrdinalIgnoreCase))
+                                                licenseTypeValue = 2;
+                                            else if (licenseType.Equals("رخص التعدين و المنجم الصغير", StringComparison.OrdinalIgnoreCase) ||
+                                                    licenseType.Equals("Mining and Small Mine Licenses", StringComparison.OrdinalIgnoreCase))
+                                                licenseTypeValue = 3;
+
                                             var incident = new Entity("incident")
                                             {
-                                                ["title"] = subject1,
+                                                ["title"] = "book an appointment",
+                                                ["new_tickettype"] = ticketTypeRef,
                                                 ["description"] = reason,
-                                                ["new_tickettype"] = GetLookupByName(service, "new_tickettype", subject1),
-                                                ["new_requesttype"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_requesttype", requestType2)),
-
-                                                ["new_beneficiarytype"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_beneficiarytype", beneficiaryType)),
-                                                ["new_ticketsubmissionchannel"] = new OptionSetValue(4), // Email
-                                                ["new_sector"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_sector", department)),
-
+                                                ["new_beneficiarytype"] = new OptionSetValue(beneficiaryValue),
+                                                ["new_ticketsubmissionchannel"] = new OptionSetValue(9),
                                                 ["customerid"] = customerRef,
                                                 ["transactioncurrencyid"] = new EntityReference("transactioncurrency", new Guid("70FA9BC3-6D4B-F011-A3FE-D4DE6FAB9C57"))
-
                                             };
 
-                                            // ➕ Set new_licensetype if sector is Licensing
                                             if ((department.Equals("Licensing", StringComparison.OrdinalIgnoreCase) ||
                                                  department.Equals("الرخص", StringComparison.OrdinalIgnoreCase)) &&
                                                 !string.IsNullOrWhiteSpace(licenseType))
-                                            {
-
-                                                incident["new_licenses"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_licenses", licenseType));
-                                            }
-                                            // ➕ Set new_compliancetype if sector is Compliance
+                                                incident["new_licenses"] = new OptionSetValue(licenseTypeValue);
                                             else if ((department.Equals("Compliance", StringComparison.OrdinalIgnoreCase) ||
                                                       department.Equals("الامتثال", StringComparison.OrdinalIgnoreCase)) &&
                                                      !string.IsNullOrWhiteSpace(complianceType))
-                                            {
-                                                incident["new_compliance"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_compliance", complianceType));
+                                                incident["new_compliance"] = new OptionSetValue(ComplianceValue);
 
-                                            }
-
-
+                                            incident["new_sector"] = new OptionSetValue(SectorValue);
 
                                             Entity email11 = new Entity("email");
-                                            email11.Id = entity.Id;
+                                            email11.Id = email.Id;
                                             email11.Attributes["regardingobjectid"] = new EntityReference("incident", service.Create(incident));
-                                            //var note3 = new Entity("annotation")
-                                            //{
-                                            //    ["subject"] = "Email Processed",
-                                            //    ["notetext"] = "in elseif company condition incident created successfully.",
-
-                                            //};
-                                            //service.Create(note3);
                                             service.Update(email11);
-
                                         }
 
                                         else if (subject1.ToLower() == "contact us" || subject1.ToLower() == "اتصل بنا")
                                         {
-                                            string beneficiaryType = MatchValue(
-                                             body,
-                                             @"(?:نوع المستفيد|Type of Beneficiary)[:\-]?\s*(مستثمر|فرد|Investor|Individual|وكيل لمستثمر|Investor Representative|أخرى|Other)"
-                                         );
-                                            // string beneficiaryType = MatchValue(body, @"(?:نوع المستفيد|Type of Beneficiary)[:\-]?\s*(مستثمر|فرد|Investor|Individual)");
+                                            string beneficiaryType = MatchValue(body, @"(?:نوع المستفيد|Type of Beneficiary)[:\-]?\s*(مستثمر|فرد|Investor|Individual|وكيل لمستثمر|Investor Representative|أخرى|Other)");
                                             string company = MatchValue(body, @"(?:اسم الشركة|Company Name)[:\-]?\s*([^\r\n]+?)\s*(?=رقم السجل التجاري|Commercial Registration Number)");
                                             string crNumber = MatchValue(body, @"(?:رقم السجل التجاري|Commercial Registration Number(?:\s*\(CR\))?)[:\-]?\s*(\d{5,})");
-
-                                            //string crNumber = MatchValue(body, @"(?:رقم السجل التجاري|Commercial Registration Number.*CR.*)[:\-]?\s*(\d+)");
-                                            string phone = MatchValue(body, @"(?:رقم الهاتف|Mobile Number)[:\-]?\s*(\d+)").Replace("&#43;", "+");
+                                            string phone = MatchValue(body, @"(?:رقم الهاتف|Mobile Number)[:\-]?\s*(\d+)");
                                             string emailAddr = MatchValue(body, @"(?:عنوان البريد الإلكتروني|Email Address)[:\-]?\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})");
                                             if (string.IsNullOrWhiteSpace(emailAddr))
-                                            {
-                                                return;  // stop plugin execution or skip further logic
-                                            }
+                                                return;
                                             string requestType = MatchValue(body, @"(?:نوع الطلب|Request Type)[:\-]?\s*(.+?)\s*(?=الموضوع|Subject)");
                                             string subject = MatchValue(body, @"(?:الموضوع|Subject)[:\-]?\s*(.+?)\s*(?=نص الرسالة|Message Text)");
                                             string message = MatchValue(body, @"(?:نص الرسالة|Message Text)[:\-]?\s*([\s\S]+?)(?=تحميل ملفات|Attachments|$)");
-                                            string attachment = MatchValue(body, @"(?:تحميل ملفات|Attachments)[:\-]?\s*([^\r\n\(]+)");
                                             string nationalId = MatchValue(body, @"(?:رقم الهوية|National ID Number)[:\-]?\s*(\d{10,15})");
-
-
-
-
+                                            string normalizedValue = NormalizeInput(requestType);
 
                                             EntityReference customerRef;
-                                            //individual
-                                            if (beneficiaryType == "فرد" || beneficiaryType.ToLower() == "individual" || beneficiaryType == "أخرى" || beneficiaryType.ToLower() == "other")
+                                            if (beneficiaryType == "فرد" || beneficiaryType.ToLower() == "individual" ||
+                                                beneficiaryType == "أخرى" || beneficiaryType.ToLower() == "other")
                                             {
                                                 var query = new QueryExpression("contact")
                                                 {
                                                     ColumnSet = new ColumnSet("contactid"),
                                                     Criteria = new FilterExpression
                                                     {
-                                                        Conditions = {
-                                new ConditionExpression("emailaddress1", ConditionOperator.Equal, emailAddr)
-                            }
+                                                        Conditions = { new ConditionExpression("emailaddress1", ConditionOperator.Equal, emailAddr) }
                                                     }
                                                 };
-
                                                 var result = service.RetrieveMultiple(query);
                                                 Guid contactId;
 
                                                 if (result.Entities.Count > 0)
-                                                {
                                                     contactId = result.Entities[0].Id;
-                                                }
                                                 else
                                                 {
                                                     var contact = new Entity("contact")
@@ -295,35 +251,28 @@ namespace CasesPlugin
                                                         ["emailaddress1"] = emailAddr,
                                                         ["mobilephone"] = phone,
                                                         ["new_nationalidnumber"] = nationalId,
-                                                        ["new_beneficiarytype"] = new OptionSetValue(GetOptionSetValue(service, "contact", "new_beneficiarytype", beneficiaryType)),
-                                                        // ["new_companyname"] = GetOrCreateCompany(service, company)
+                                                        ["new_beneficiarytype"] = new OptionSetValue(GetOptionSetValue(service, "contact", "new_beneficiarytype", beneficiaryType))
                                                     };
                                                     contactId = service.Create(contact);
                                                 }
-
                                                 customerRef = new EntityReference("contact", contactId);
                                             }
-                                            //investor
-                                            else if (beneficiaryType == "مستثمر" || beneficiaryType.ToLower() == "investor" || beneficiaryType == "وكيل لمستثمر" || beneficiaryType.ToLower() == "investor representative")
+                                            else if (beneficiaryType == "مستثمر" || beneficiaryType.ToLower() == "investor" ||
+                                                     beneficiaryType == "وكيل لمستثمر" || beneficiaryType.ToLower() == "investor representative")
                                             {
                                                 var query = new QueryExpression("account")
                                                 {
                                                     ColumnSet = new ColumnSet("accountid"),
                                                     Criteria = new FilterExpression
                                                     {
-                                                        Conditions = {
-                                new ConditionExpression("name", ConditionOperator.Equal, company)
-                            }
+                                                        Conditions = { new ConditionExpression("name", ConditionOperator.Equal, company) }
                                                     }
                                                 };
-
                                                 var result = service.RetrieveMultiple(query);
                                                 Guid accountId;
 
                                                 if (result.Entities.Count > 0)
-                                                {
                                                     accountId = result.Entities[0].Id;
-                                                }
                                                 else
                                                 {
                                                     var account = new Entity("account")
@@ -337,179 +286,140 @@ namespace CasesPlugin
                                                     };
                                                     accountId = service.Create(account);
                                                 }
-
                                                 customerRef = new EntityReference("account", accountId);
                                             }
                                             else
                                             {
+                                                tracing.Trace("Unsupported beneficiary type: " + beneficiaryType);
                                                 return;
                                             }
 
+                                            int beneficiaryValue = -1;
+                                            if (beneficiaryType.Equals("فرد", StringComparison.OrdinalIgnoreCase) ||
+                                                beneficiaryType.Equals("Individual", StringComparison.OrdinalIgnoreCase))
+                                                beneficiaryValue = 1;
+                                            else if (beneficiaryType.Equals("مستثمر", StringComparison.OrdinalIgnoreCase) ||
+                                                     beneficiaryType.Equals("Investor", StringComparison.OrdinalIgnoreCase))
+                                                beneficiaryValue = 3;
+                                            else if (beneficiaryType.Equals("وكيل لمستثمر", StringComparison.OrdinalIgnoreCase) ||
+                                                     beneficiaryType.Equals("Investor Representative", StringComparison.OrdinalIgnoreCase))
+                                                beneficiaryValue = 4;
+                                            else if (beneficiaryType.Equals("أخرى", StringComparison.OrdinalIgnoreCase) ||
+                                                     beneficiaryType.Equals("Other", StringComparison.OrdinalIgnoreCase))
+                                                beneficiaryValue = 5;
+
+                                            EntityReference ticketTypeRef = GetTicketType(service, normalizedValue);
                                             var incident = new Entity("incident")
                                             {
                                                 ["title"] = subject,
                                                 ["description"] = message,
-                                                ["new_tickettype"] = GetLookupByName(service, "new_tickettype", subject1),
-                                                //["new_tickettype"] = GetLookupByName(service, "new_tickettype", requestType),
-                                                ["new_requesttype"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_requesttype", requestType)),
-                                                ["new_beneficiarytype"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_beneficiarytype", beneficiaryType)),
-                                                ["new_ticketsubmissionchannel"] = new OptionSetValue(4), // online form
+                                                ["new_tickettype"] = ticketTypeRef,
+                                                ["new_beneficiarytype"] = new OptionSetValue(beneficiaryValue),
+                                                ["new_ticketsubmissionchannel"] = new OptionSetValue(8),
                                                 ["customerid"] = customerRef,
                                                 ["transactioncurrencyid"] = new EntityReference("transactioncurrency", new Guid("70FA9BC3-6D4B-F011-A3FE-D4DE6FAB9C57"))
                                             };
 
                                             Entity email11 = new Entity("email");
-                                            email11.Id = entity.Id;
+                                            email11.Id = email.Id;
                                             email11.Attributes["regardingobjectid"] = new EntityReference("incident", service.Create(incident));
                                             service.Update(email11);
-
                                         }
                                     }
                                 }
                             }
                         }
                     }
-
-                    // Safely working with the Target entity
-                    //string logicalName = entity.LogicalName;
-                    //Entity email = context.InputParameters["Target"];
-                    //// Only process incoming emails
-                    //if (!email.GetAttributeValue<bool>("directioncode"))
-                    //    return;
-
-                    //// Extract sender email
-                    //if (!email.Attributes.Contains("from"))
-                    //    return;
-
-                    //var fromParties = email.GetAttributeValue<EntityCollection>("from");
-                    //if (fromParties.Entities.Count == 0)
-                    //    return;
-
-                    //var senderParty = fromParties.Entities[0];
-                    //var partyIdRef = senderParty.GetAttributeValue<EntityReference>("partyid");
-                    //if (partyIdRef == null || !partyIdRef.Name.Equals("no-reply@taadeen.sa", StringComparison.OrdinalIgnoreCase))
-                    //    return;
-
-
                 }
-            }
-            catch (Exception ex)
-            {
-                tracer.Trace("❌ Plugin Exception: " + ex.ToString());
-                throw;
-            }
-        }
-        static string MatchValueForAppointment(string input, string pattern)
-        {
-            var match = Regex.Match(input, pattern, RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups[1].Value.Trim() : "Not Found";
-        }
-
-        public static string StripHtml(string html)
-        {
-            try
-            {
-                var doc = System.Xml.Linq.XDocument.Parse($"<root>{html}</root>");
-                return string.Concat(doc.DescendantNodes().OfType<System.Xml.Linq.XText>().Select(t => t.Value));
-            }
-            catch
-            {
-                // fallback if parsing fails
-                return Regex.Replace(html, "<.*?>", string.Empty);
-            }
-        }
-        //private static string StripHtml(string html)
-        //{
-        //    var doc = new HtmlAgilityPack.HtmlDocument();
-        //    doc.LoadHtml(html);
-        //    return HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
-        //}
-        private static string ConvertBeneficiaryTypeToEnglish(string arabicType)
-        {
-            switch (arabicType.Trim())
-            {
-                case "مستثمر":
-                    return "Investor";
-                case "Investor":
-                    return "Investor";
-
-                case "فرد":
-                    return "Individual";
-                case "Individual":
-                    return "Individual";
-                default:
-                    return "Unknown"; // Or return arabicType if you want to keep unrecognized values
-            }
-        }
-
-        private static string MatchValue(string input, string pattern)
-        {
-            input = System.Net.WebUtility.HtmlDecode(input); // decode HTML entities
-            input = input.Replace("\u00A0", " "); // non-breaking spaces
-            input = Regex.Replace(input, @"\s+", " "); // normalize all whitespace
-
-            var match = Regex.Match(input, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
-        }
-        private static EntityReference GetOrCreateCompany(IOrganizationService service, string companyName)
-        {
-            var query = new QueryExpression("account")
-            {
-                ColumnSet = new ColumnSet("accountid"),
-                Criteria = new FilterExpression
+                catch (Exception ex)
                 {
-                    Conditions = {
-                        new ConditionExpression("name", ConditionOperator.Equal, companyName)
-                    }
+                    tracing.Trace("❌ Error: " + ex.Message + " | " + ex.StackTrace);
+                    throw;
                 }
+
+                tracing.Trace("=== EmailToCasePlugin END ===");
+            }
+
+            // ---------------- HELPER FUNCTIONS -------------------
+
+            public static string StripHtml(string html)
+            {
+                try
+                {
+                    var doc = System.Xml.Linq.XDocument.Parse($"<root>{html}</root>");
+                    return string.Concat(doc.DescendantNodes().OfType<System.Xml.Linq.XText>().Select(t => t.Value));
+                }
+                catch
+                {
+                    return Regex.Replace(html, "<.*?>", string.Empty);
+                }
+            }
+
+            public static string NormalizeInput(string input)
+            {
+                if (string.IsNullOrWhiteSpace(input))
+                    return null;
+                input = input.Trim();
+                return translations.ContainsKey(input) ? translations[input] : null;
+            }
+
+            public static EntityReference GetTicketType(IOrganizationService service, string value)
+            {
+                var query = new QueryExpression("new_tickettype")
+                {
+                    ColumnSet = new ColumnSet("new_tickettypeid", "new_tickettype")
+                };
+                if (string.IsNullOrEmpty(value))
+                    query.Criteria.AddCondition("new_tickettype", ConditionOperator.Null);
+                else
+                    query.Criteria.AddCondition("new_tickettype", ConditionOperator.Equal, value);
+                EntityCollection result = service.RetrieveMultiple(query);
+                return null;
+            }
+
+           private static readonly Dictionary<string, string> translations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "استفسار", "استفسار" }, { "Inquiry", "استفسار" },
+                { "متابعة طلب", "متابعة طلب" }, { "Follow-up Request", "متابعة طلب" },
+                { "دعم تقني", "دعم تقني" }, { "Technical Support", "دعم تقني" },
+                { "اقتراح", "اقتراح" }, { "Suggestion", "اقتراح" },
+                { "شكوى", "شكوى" }, { "Complaint", "شكوى" },
+                { "حجز موعد", "حجز موعد" }, { "Meeting request", "حجز موعد" },
+                {"اتصال مرئي","اتصال مرئي"},{ "Video Call","اتصال مرئي"}
             };
 
-            var result = service.RetrieveMultiple(query);
-            if (result.Entities.Count > 0)
-                return new EntityReference("account", result.Entities[0].Id);
-
-            var account = new Entity("account") { ["name"] = companyName };
-            var id = service.Create(account);
-            return new EntityReference("account", id);
-        }
-
-        private static EntityReference GetLookupByName(IOrganizationService service, string entityName, string name)
-        {
-            var query = new QueryExpression(entityName)
+            private static int GetOptionSetValue(IOrganizationService service, string entityName, string fieldName, string label)
             {
-                ColumnSet = new ColumnSet($"{entityName}id"),
-                Criteria = new FilterExpression
+                var response = (RetrieveAttributeResponse)service.Execute(new RetrieveAttributeRequest
                 {
-                    Conditions = {
-                        new ConditionExpression("new_tickettype", ConditionOperator.Equal, name)
-                    }
+                    EntityLogicalName = entityName,
+                    LogicalName = fieldName,
+                    RetrieveAsIfPublished = true
+                });
+
+                var metadata = (PicklistAttributeMetadata)response.AttributeMetadata;
+                foreach (var opt in metadata.OptionSet.Options)
+                {
+                    if (opt.Label.UserLocalizedLabel.Label == label)
+                        return opt.Value.Value;
                 }
-            };
 
-            var result = service.RetrieveMultiple(query);
-            if (result.Entities.Count > 0)
-                return new EntityReference(entityName, result.Entities[0].Id);
-
-            throw new InvalidPluginExecutionException($"Lookup '{name}' not found in {entityName}.");
-        }
-
-        private static int GetOptionSetValue(IOrganizationService service, string entityName, string fieldName, string label)
-        {
-            var response = (RetrieveAttributeResponse)service.Execute(new RetrieveAttributeRequest
-            {
-                EntityLogicalName = entityName,
-                LogicalName = fieldName,
-                RetrieveAsIfPublished = true
-            });
-
-            var metadata = (PicklistAttributeMetadata)response.AttributeMetadata;
-            foreach (var opt in metadata.OptionSet.Options)
-            {
-                if (opt.Label.UserLocalizedLabel.Label == label)
-                    return opt.Value.Value;
+                throw new InvalidPluginExecutionException($"Option '{label}' not found in '{fieldName}' on '{entityName}'");
             }
 
-            throw new InvalidPluginExecutionException($"Option '{label}' not found in '{fieldName}' on '{entityName}'");
+            static string MatchValueForAppointment(string input, string pattern)
+            {
+                var match = Regex.Match(input, pattern, RegexOptions.IgnoreCase);
+                return match.Success ? match.Groups[1].Value.Trim() : "Not Found";
+            }
+
+            private static string MatchValue(string input, string pattern)
+            {
+                input = System.Net.WebUtility.HtmlDecode(input);
+                input = input.Replace("\u00A0", " ");
+                input = Regex.Replace(input, @"\s+", " ");
+                var match = Regex.Match(input, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+            }
         }
     }
-}
