@@ -1,0 +1,470 @@
+<html><head>
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+/* ===== THEME (as requested) ===== */
+body {
+    font-family: "Segoe UI", sans-serif;
+    background: #f4f5f7;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+}
+h2 {
+    color: #5B4A35;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.filter-section {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.filter-section input[type="date"], .filter-section select, .filter-section input[type="number"] {
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.filter-section button {
+    background: #5B4A35;
+    border: none;
+    color: white;
+    padding: 7px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.filter-section button:hover { background: #A58A60; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+}
+th {
+    background: #7E6A4C;
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+tr:hover { background: #A58A60; color: white; }
+
+.status-green { color: green; font-weight: bold; }
+.status-red { color: red; font-weight: bold; }
+.status-yellow { color: #d2a106; font-weight: bold; }
+
+.loading {
+    text-align: center;
+    padding: 15px;
+    font-weight: bold;
+}
+
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 8px 0 4px 0;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Pagination (theme) */
+.pagination {
+    margin-top: 10px;
+    text-align: center;
+}
+.pagination button {
+    background: #5B4A35;
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    margin: 0 3px;
+    cursor: pointer;
+}
+.pagination button.active { background: #A58A60; font-weight: bold; }
+.pagination button:hover { background: #A58A60; }
+.pagination input[type="number"] {
+    width: 70px;
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.pagination .controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Counter centered under table */
+.counter {
+    text-align: center;
+    font-weight: bold;
+    margin-top: 6px;
+    color: #5B4A35;
+}
+</style>
+<meta></head>
+<body data-new-gr-c-s-check-loaded="14.1259.0" data-gr-ext-installed="" data-new-gr-c-s-loaded="14.1259.0" style="overflow-wrap: break-word;">
+
+
+<div class="filter-section">
+    <label>Start Date:</label>
+    <input type="date" id="startDate">
+    <label>End Date:</label>
+    <input type="date" id="endDate">
+
+    <button onclick="loadSLADashboard()">Load Data</button>
+    <button onclick="exportToExcel()">Export Excel</button>
+
+    <label style="margin-left:16px;">Rows / page:</label>
+    <select id="rowsPerPage" onchange="changePageSize()">
+        <option value="10" selected="">10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+    </select>
+</div>
+
+<div class="toolbar">
+    <div></div>
+    <div id="loading" class="loading" style="display:none;">Loading data, please wait...</div>
+    <div></div>
+</div>
+
+<div class="table-container" style="overflow-x:auto;">
+  <table id="slaTable" class="table-fixed">
+    <colgroup>
+      <col style="width:100px">  <!-- Ticket Number -->
+      <col style="width:220px">  <!-- Case Title -->
+      <col style="width:160px">  <!-- Owner -->
+      <col style="width:140px">  <!-- Created On -->
+	  <col style="width:140px">  <!-- Last Update -->
+	  <col style="width:140px">  <!-- Assignment Success Time -->
+	  <col style="width:140px">  <!-- Processing Success Time -->
+	  <col style="width:140px">  <!-- Verification Success Time -->
+      <col style="width:140px">  <!-- Assignment KPI -->
+      <col style="width:140px">  <!-- Processing KPI -->
+      <col style="width:140px">  <!-- Verification KPI -->
+      <col style="width:160px">  <!-- Overall SLA Summary -->
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Ticket Number</th>
+        <th>Case Title</th>
+        <th>Owner</th>
+        <th>Created On</th>
+		<th>Last Update</th>
+		<th>Assignment Success Time</th>
+		<th>Processing Success Time</th>
+		<th>Verification Success Time</th>
+        <th>Assignment KPI</th>
+        <th>Processing KPI</th>
+        <th>Verification KPI</th>
+        <th>Overall SLA Summary</th>
+      </tr>
+    </thead>
+    <tbody id="slaTableBody">
+		<tr><td colspan="8" style="text-align:center;">No data loaded</td></tr>
+	</tbody>
+  </table>
+</div>
+
+<div class="counter" id="resultCounter">Showing 0–0 of 0</div>
+<div class="pagination" id="pagination"></div>
+
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script>
+let allRecords = [];
+let currentPage = 1;
+let pageSize = 10; // can be 10/20/50
+
+// ===== Safe Xrm Access =====
+function getXrm() {
+    try {
+        if (typeof Xrm !== "undefined") return Xrm;
+        if (window.parent && window.parent.Xrm) return window.parent.Xrm;
+        if (window.top && window.top.Xrm) return window.top.Xrm;
+    } catch (e) { console.warn("⚠️ Cannot access Xrm:", e); }
+    return null;
+}
+
+// ===== Default Date Range (Yesterday–Today) =====
+window.onload = function() {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    document.getElementById("startDate").value = yesterday.toISOString().split("T")[0];
+    document.getElementById("endDate").value = today.toISOString().split("T")[0];
+    loadSLADashboard();
+};
+
+// ===== Change page size =====
+function changePageSize(){
+    const sel = document.getElementById('rowsPerPage');
+    pageSize = parseInt(sel.value, 10);
+    currentPage = 1;
+    renderTable();
+}
+
+// ===== Fetch Data (sorted by createdon desc) =====
+async function loadSLADashboard() {
+    const X = getXrm();
+    if (!X) { alert("❌ Xrm not found. Open inside CRM."); return; }
+
+    const startDate = document.getElementById("startDate").value;
+    const endDate = document.getElementById("endDate").value;
+    const tableBody = document.getElementById("slaTableBody");
+    const loader = document.getElementById("loading");
+    loader.style.display = "block";
+    tableBody.innerHTML = "";
+
+    try {
+        let query = "?$select=ticketnumber,title,ownerid,_ownerid_value,createdon,statecode,modifiedon," +
+            "new_assignmentsucceededon,new_processingsucceededon,new_solutionverificationsucceededon," +
+            "new_assignmentslaviolationl1,new_assignmentslaviolationl2,new_assignmentslaviolationl3," +
+            "new_slaviolationl1,new_slaviolationl2,new_slaviolationl3,new_slaviolationl4," +
+            "new_verificationslaviolationl1,new_verificationslaviolationl2,new_verificationslaviolationl3" +
+            `&$filter=createdon ge ${startDate}T00:00:00Z and createdon le ${endDate}T23:59:59Z` +
+            `&$orderby=createdon desc`;  // ensure newest first
+
+        console.log("🔍 Fetching incidents:", query);
+        const response = await X.WebApi.retrieveMultipleRecords("incident", query);
+        allRecords = response.entities;
+        console.log(`📦 ${allRecords.length} records`);
+        currentPage = 1;
+        renderTable();
+    } catch (err) {
+        console.error("❌ Load error:", err);
+        tableBody.innerHTML = `<tr><td colspan="8" style="color:red;text-align:center;">Error loading data.</td></tr>`;
+        document.getElementById("resultCounter").innerText = "Showing 0–0 of 0";
+        document.getElementById("pagination").innerHTML = "";
+    } finally {
+        loader.style.display = "none";
+    }
+}
+
+// ===== Table Rendering with Counter & Pagination =====
+function renderTable() {
+    const tableBody = document.getElementById("slaTableBody");
+    tableBody.innerHTML = "";
+
+    if (allRecords.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No records found</td></tr>`;
+        document.getElementById("resultCounter").innerText = "Showing 0–0 of 0";
+        document.getElementById("pagination").innerHTML = "";
+        return;
+    }
+
+    const total = allRecords.length;
+    const startIdx = (currentPage - 1) * pageSize;
+    const endIdx = Math.min(startIdx + pageSize, total);
+    const pageRecords = allRecords.slice(startIdx, endIdx);
+
+    pageRecords.forEach(rec => {
+        const assignment = getKPI(rec, "assignments");
+        const processing = getKPI(rec, "processing");
+        const verification = getKPI(rec, "verification");
+        const summary = getOverallSummary(rec);
+        const row = `<tr>
+            <td>${rec.ticketnumber || ""}</td>
+            <td>${rec.title || ""}</td>
+            <td>${rec["_ownerid_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+            <td>${formatDate(rec.createdon)}</td>
+			<td>${formatDate(rec.modifiedon)}</td>
+			<td>${rec.new_assignmentsucceededon ? formatDate(rec.new_assignmentsucceededon) : "NULL"}</td>
+			<td>${rec.new_processingsucceededon ? formatDate(rec.new_processingsucceededon) : "NULL"}</td>
+			<td>${rec.new_solutionverificationsucceededon ? formatDate(rec.new_solutionverificationsucceededon) : "NULL"}</td>
+            <td>${assignment.result}<br><small>${assignment.level}</small></td>
+            <td>${processing.result}<br><small>${processing.level}</small></td>
+            <td>${verification.result}<br><small>${verification.level}</small></td>
+            <td>${summary}</td>
+        </tr>`;
+        tableBody.innerHTML += row;
+    });
+
+    // Counter (center)
+    document.getElementById("resultCounter").innerText =
+        `Showing ${total === 0 ? 0 : startIdx + 1}-${endIdx} of ${total}`;
+
+    renderPagination(total);
+}
+
+// ===== Pagination (Prev / numbers / Next + Page Jump) =====
+function renderPagination(totalCount) {
+    const paginationDiv = document.getElementById("pagination");
+    const totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) { paginationDiv.innerHTML = ""; return; }
+
+    let html = `<button onclick="prevPage()" ${currentPage===1?"disabled":""}>◀ Prev</button>`;
+
+    // numeric buttons (cap to reasonable window)
+    const windowSize = 7;
+    let start = Math.max(1, currentPage - Math.floor(windowSize/2));
+    let end = Math.min(totalPages, start + windowSize - 1);
+    if (end - start + 1 < windowSize) start = Math.max(1, end - windowSize + 1);
+
+    for (let i = start; i <= end; i++) {
+        html += `<button class="${i===currentPage?"active":""}" onclick="gotoPage(${i})">${i}</button>`;
+    }
+
+    html += `<button onclick="nextPage()" ${currentPage===totalPages?"disabled":""}>Next ▶</button>`;
+
+    // page jump
+    html += `<div class="controls">
+                <span>| Page:</span>
+                <input type="number" id="pageJump" min="1" max="${totalPages}" value="${currentPage}">
+                <button onclick="goToPage()">Go</button>
+             </div>`;
+
+    paginationDiv.innerHTML = html;
+}
+function gotoPage(page){ currentPage = page; renderTable(); }
+function nextPage(){ currentPage++; renderTable(); }
+function prevPage(){ currentPage--; renderTable(); }
+function goToPage(){
+    const totalPages = Math.ceil(allRecords.length / pageSize);
+    const val = parseInt(document.getElementById('pageJump').value, 10);
+    if (!isNaN(val) && val >= 1 && val <= totalPages) {
+        currentPage = val;
+        renderTable();
+    }
+}
+
+// ===== KPI Logic =====
+function getKPI(rec,type){
+    let result="Pending",level="N/A";
+    if(type==="assignments"){
+        if(rec.new_assignmentsucceededon)result="Succeeded";
+        else if(rec.new_assignmentslaviolationl1||rec.new_assignmentslaviolationl2||rec.new_assignmentslaviolationl3)result="Failed";
+        else result="In Progress";
+        if(rec.new_assignmentslaviolationl3)level="Level 3";
+        else if(rec.new_assignmentslaviolationl2)level="Level 2";
+        else if(rec.new_assignmentslaviolationl1)level="Level 1";
+        else level="Level 1";
+    }
+    if(type==="processing"){
+        if(rec.new_processingsucceededon)result="Succeeded";
+        else if(rec.new_slaviolationl1||rec.new_slaviolationl2||rec.new_slaviolationl3||rec.new_slaviolationl4)result="Failed";
+        else if(rec.new_assignmentsucceededon&&!rec.new_processingsucceededon)result="In Progress";
+        else result="Pending";
+        if(rec.new_slaviolationl4)level="Level 4";
+        else if(rec.new_slaviolationl3)level="Level 3";
+        else if(rec.new_slaviolationl2)level="Level 2";
+        else if(rec.new_slaviolationl1)level="Level 1";
+        else if(rec.new_processingsucceededon)level="Level 1";
+    }
+    if(type==="verification"){
+        if(rec.new_solutionverificationsucceededon)result="Succeeded";
+        else if(rec.new_verificationslaviolationl1||rec.new_verificationslaviolationl2||rec.new_verificationslaviolationl3)result="Failed";
+        else if(rec.new_processingsucceededon&&!rec.new_solutionverificationsucceededon)result="In Progress";
+        else if(rec.statecode===1)result="Succeeded (Resolved)";
+        else result="Pending";
+        if(rec.new_verificationslaviolationl3)level="Level 3";
+        else if(rec.new_verificationslaviolationl2)level="Level 2";
+        else if(rec.new_verificationslaviolationl1)level="Level 1";
+        else if(rec.new_solutionverificationsucceededon)level="Level 1";
+    }
+    return{result,level};
+}
+
+// ===== Overall SLA =====
+function getOverallSummary(rec){
+    const hasFail=
+        rec.new_assignmentslaviolationl1||rec.new_assignmentslaviolationl2||rec.new_assignmentslaviolationl3||
+        rec.new_slaviolationl1||rec.new_slaviolationl2||rec.new_slaviolationl3||rec.new_slaviolationl4||
+        rec.new_verificationslaviolationl1||rec.new_verificationslaviolationl2||rec.new_verificationslaviolationl3;
+    if(hasFail)return`<span class='status-red'>One or More KPIs Failed</span>`;
+    const allSucceeded=rec.new_assignmentsucceededon&&rec.new_processingsucceededon&&rec.new_solutionverificationsucceededon;
+    const isResolved=rec.statecode===1;
+    const verificationSuccess=rec.new_solutionverificationsucceededon&&!hasFail;
+    if(isResolved&&verificationSuccess)return`<span class='status-green'>All KPIs Succeeded</span>`;
+    if(allSucceeded)return`<span class='status-green'>All KPIs Succeeded</span>`;
+    return`<span class='status-yellow'>In Progress</span>`;
+}
+//function formatDate(dateStr){if(!dateStr)return"";const d=new Date(dateStr);return d.toLocaleDateString();}
+function formatDate(dateStr) {
+  if (!dateStr) return "NULL";
+
+  // If already in readable CRM format (with AM/PM), return as-is
+  if (typeof dateStr === "string" && (dateStr.includes("AM") || dateStr.includes("PM"))) {
+    return dateStr;
+  }
+
+  // If in ISO format (e.g., 2025-10-17T10:24:00Z), convert manually
+  const d = new Date(dateStr);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  let hours = d.getUTCHours() + 3; // convert to KSA time (UTC+3)
+  if (hours >= 24) hours -= 24;
+  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(d.getUTCSeconds()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+
+  return `${month}/${day}/${year}  ${hours}:${minutes}:${seconds} ${ampm}`;
+}
+
+
+// ===== Excel Export =====
+function exportToExcel() {
+    if (allRecords.length === 0) { 
+        alert("No data to export."); 
+        return; 
+    }
+
+    // Prepare data for Excel
+    const data = allRecords.map(rec => {
+        const assignment = getKPI(rec, "assignments");
+        const processing = getKPI(rec, "processing");
+        const verification = getKPI(rec, "verification");
+        const summary = getOverallSummary(rec).replace(/(<([^>]+)>)/gi, ""); // strip HTML
+
+        return {
+            "Ticket Number": rec.ticketnumber || "",
+            "Case Title": rec.title || "",
+            "Owner": rec["_ownerid_value@OData.Community.Display.V1.FormattedValue"] || "",
+            "Created On": formatDate(rec.createdon),
+			"modifiedon":formatDate(rec.modifiedon),
+			"new_assignmentsucceededon":formatDate(rec.new_assignmentsucceededon) || "NULL",
+			"new_processingsucceededon":formatDate(rec.new_processingsucceededon)|| "NULL",
+			"new_solutionverificationsucceededon":formatDate(rec.new_solutionverificationsucceededon)|| "NULL",
+            "Assignment KPI": assignment.result,
+            "Assignment Level": assignment.level,
+            "Processing KPI": processing.result,
+            "Processing Level": processing.level,
+            "Verification KPI": verification.result,
+            "Verification Level": verification.level,
+            "Overall SLA Summary": summary
+        };
+    });
+
+    // Create worksheet and workbook
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SLA Report");
+
+    // Export to file
+    XLSX.writeFile(wb, `CRM_SLA_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+</script>
+
+
+</body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>
