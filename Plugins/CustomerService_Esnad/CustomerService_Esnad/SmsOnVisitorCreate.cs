@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Linq;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using Microsoft.Xrm.Sdk;
@@ -14,172 +13,187 @@ namespace Taadeen.Crm.Plugins
         private const string Token = "7sgOnsFhAuYdNgg5a3R4";
         private const string Sender = "Taadeen";
 
-        private const string ENTITY_VISITOR = "new_visitor";
-
-        public SmsOnVisitorCreate(string unsecure, string secure) { }
-
         public void Execute(IServiceProvider serviceProvider)
         {
             var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
-            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-            var service = factory.CreateOrganizationService(context.UserId);
             var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
+            var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var service = serviceFactory.CreateOrganizationService(context.UserId);
 
-            tracing.Trace("=== SmsOnVisitorCreate START ===");
+            tracing.Trace("SendVisitorSMSOnCreate plugin started.");
 
             try
             {
-                // ✅ Ensure plugin runs only on Create of new_visitor
-                if (!string.Equals(context.MessageName, "Create", StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(context.PrimaryEntityName, ENTITY_VISITOR, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidPluginExecutionException(
-                        $"Wrong trigger. Message={context.MessageName}, Entity={context.PrimaryEntityName}");
-                }
+                if (context.MessageName.ToLower() != "create" || !context.InputParameters.Contains("Target"))
+                    return;
 
-                if (!context.OutputParameters.Contains("id"))
-                    throw new InvalidPluginExecutionException("OutputParameters does not contain 'id'");
+                var visitor = (Entity)context.InputParameters["Target"];
+                if (visitor.LogicalName != "new_visitor") return;
 
-                var visitorId = (Guid)context.OutputParameters["id"];
-                var cols = new ColumnSet("new_contactname", "new_companyname", "new_visitornumber");
-                var visitor = service.Retrieve(ENTITY_VISITOR, visitorId, cols);
-                if (visitor == null)
-                    throw new InvalidPluginExecutionException("Visitor record could not be retrieved");
+                string visitorNumber = visitor.GetAttributeValue<string>("new_visitornumber") ?? "";
+                EntityReference contactRef = visitor.GetAttributeValue<EntityReference>("new_contactname");
+                EntityReference accountRef = visitor.GetAttributeValue<EntityReference>("new_companyname");
 
                 string phone = null;
-
-                // 1️⃣ Try Contact phone
-                var contactRef = visitor.GetAttributeValue<EntityReference>("new_contactname");
                 if (contactRef != null)
                     phone = ResolvePhoneForContact(service, contactRef, tracing);
+                if (string.IsNullOrWhiteSpace(phone) && accountRef != null)
+                    phone = ResolvePhoneForAccount(service, accountRef, tracing);
 
-                // 2️⃣ Fallback: Account phone
-                if (string.IsNullOrWhiteSpace(phone))
+                string smsBody = SmsTemplates.ForVisitorCreate(visitorNumber);
+                bool smsSent = false;
+                string apiResult = "";
+
+                if (!string.IsNullOrWhiteSpace(phone) && IsValidPhone(phone))
                 {
-                    var accountRef = visitor.GetAttributeValue<EntityReference>("new_companyname");
-                    if (accountRef != null)
-                        phone = ResolvePhoneForAccount(service, accountRef, tracing);
-                }
-
-                if (string.IsNullOrWhiteSpace(phone))
-                    throw new InvalidPluginExecutionException("No phone number found for Visitor.");
-
-                // ✅ SMS Body
-                var body = SmsTemplates.ForVisitorCreate();
-
-                // 🔗 Append Visitor Feedback URL using environment variable
-                var visitorNumber = visitor.GetAttributeValue<string>("new_visitornumber");
-                if (!string.IsNullOrWhiteSpace(visitorNumber))
-                {
-                    var baseUrl = GetConfigValue(service, "FeedbackBaseUrl", tracing);
-                    body += $"\n{baseUrl}/visitor?visitorId={visitorNumber}";
-                    tracing.Trace($"Feedback URL built with VisitorId={visitorNumber}, base={baseUrl}");
+                    apiResult = SendSms(phone, smsBody, tracing);
+                    smsSent = true;
                 }
                 else
                 {
-                    tracing.Trace("VisitorNumber missing, skipping feedback URL.");
+                    apiResult = "Invalid or missing phone number";
                 }
 
-                // ✅ Send SMS
-                SendSms(phone, body, tracing);
+                // ✅ Log SMS result in CRM
+                var note = new Entity("new_smsnotification");
+                note["new_name"] = "Visitor Creation";
+                note["new_smsbody"] = smsBody;
+                note["new_issent"] = smsSent;
+                note["new_receivervisitor"] = visitor.ToEntityReference();
+               
 
-                tracing.Trace("=== SmsOnVisitorCreate END ===");
+                if (contactRef != null)
+                    note["new_contact"] = contactRef;
+                else if (accountRef != null)
+                    note["new_contact"] = accountRef;
+
+                service.Create(note);
+
+                tracing.Trace($"SMS process completed for visitor {visitorNumber}. Result: {apiResult}");
             }
             catch (Exception ex)
             {
-                tracing.Trace("❌ Exception: " + ex);
-                throw new InvalidPluginExecutionException("SmsOnVisitorCreate failed: " + ex.Message, ex);
+                tracing.Trace("Error in plugin: " + ex.Message);
+                LogErrorToSmsNotification(serviceProvider, ex);
+                // remain silent — no exception thrown
             }
-        }
-
-        // 🔹 Helper to fetch values from your custom environmentvariable entity
-        private string GetConfigValue(IOrganizationService service, string name, ITracingService tracing)
-        {
-            var query = new QueryExpression("new_environmentvariable")
-            {
-                ColumnSet = new ColumnSet("new_value"),
-                Criteria =
-                {
-                    Conditions =
-                    {
-                        new ConditionExpression("new_name", ConditionOperator.Equal, name)
-                    }
-                }
-            };
-
-            var result = service.RetrieveMultiple(query).Entities.FirstOrDefault();
-            if (result != null && result.Contains("new_value"))
-            {
-                var value = result.GetAttributeValue<string>("new_value");
-                tracing.Trace($"Config {name} resolved to: {value}");
-                return value;
-            }
-
-            tracing.Trace($"❌ Config {name} not found.");
-            throw new InvalidPluginExecutionException($"Config {name} missing in new_environmentvariable.");
         }
 
         private string ResolvePhoneForContact(IOrganizationService service, EntityReference contactRef, ITracingService tracing)
         {
-            var c = service.Retrieve("contact", contactRef.Id,
-                new ColumnSet("mobilephone", "telephone1", "telephone2"));
-            var raw = FirstNonEmpty(
-                c.GetAttributeValue<string>("mobilephone"),
-                c.GetAttributeValue<string>("telephone1"),
-                c.GetAttributeValue<string>("telephone2")
-            );
-            tracing.Trace($"Resolved contact phone: {raw}");
-            return CleanPhone(raw);
+            try
+            {
+                var c = service.Retrieve("contact", contactRef.Id, new ColumnSet("mobilephone", "telephone1", "telephone2"));
+                var raw = FirstNonEmpty(
+                    c.GetAttributeValue<string>("mobilephone"),
+                    c.GetAttributeValue<string>("telephone1"),
+                    c.GetAttributeValue<string>("telephone2")
+                );
+                return CleanPhone(raw);
+            }
+            catch (Exception ex)
+            {
+                tracing.Trace("Error resolving contact phone: " + ex.Message);
+                return null;
+            }
         }
 
         private string ResolvePhoneForAccount(IOrganizationService service, EntityReference accountRef, ITracingService tracing)
         {
-            var a = service.Retrieve("account", accountRef.Id,
-                new ColumnSet("new_companyrepresentativephonenumber", "telephone1", "telephone2", "telephone3"));
-            var raw = FirstNonEmpty(
-                a.GetAttributeValue<string>("new_companyrepresentativephonenumber"),
-                a.GetAttributeValue<string>("telephone1"),
-                a.GetAttributeValue<string>("telephone2"),
-                a.GetAttributeValue<string>("telephone3")
-            );
-            tracing.Trace($"Resolved account phone: {raw}");
-            return CleanPhone(raw);
+            try
+            {
+                var a = service.Retrieve("account", accountRef.Id, new ColumnSet("telephone1", "telephone2", "telephone3", "new_companyrepresentativephonenumber"));
+                var raw = FirstNonEmpty(
+                    a.GetAttributeValue<string>("new_companyrepresentativephonenumber"),
+                    a.GetAttributeValue<string>("telephone1"),
+                    a.GetAttributeValue<string>("telephone2"),
+                    a.GetAttributeValue<string>("telephone3")
+                );
+                return CleanPhone(raw);
+            }
+            catch (Exception ex)
+            {
+                tracing.Trace("Error resolving account phone: " + ex.Message);
+                return null;
+            }
         }
 
-        private static string FirstNonEmpty(params string[] values) =>
-            values?.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
-
-        private static string CleanPhone(string raw) =>
-            Regex.Replace(raw ?? string.Empty, @"[^\d+]", "");
-
-        private void SendSms(string phone, string body, ITracingService tracing)
+        private string FirstNonEmpty(params string[] vals)
         {
-            tracing.Trace($"📨 Sending SMS to {phone}. Body={body}");
+            foreach (var v in vals)
+                if (!string.IsNullOrWhiteSpace(v))
+                    return v;
+            return null;
+        }
 
-            string enc(string s) => Uri.EscapeDataString(s ?? string.Empty);
+        private string CleanPhone(string raw)
+        {
+            return Regex.Replace(raw ?? string.Empty, @"[^\d+]", "");
+        }
 
-            var url = $"{SmsGatewayUrl}?username={enc(Username)}&token={enc(Token)}" +
-                      $"&dests={enc(phone)}&body={enc(body)}" +
-                      $"&priority=0&delay=0&validity=0&maxParts=0&dlr=0&prevDups=0" +
-                      $"&src={enc(Sender)}";
+        private bool IsValidPhone(string phone)
+        {
+            return !string.IsNullOrWhiteSpace(phone) && Regex.IsMatch(phone, @"^\+?\d{8,}$");
+        }
 
-            using (var http = new HttpClient())
+        private string SendSms(string phone, string body, ITracingService tracing)
+        {
+            try
             {
-                var resp = http.GetAsync(url).GetAwaiter().GetResult();
-                var content = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                string enc(string s) => Uri.EscapeDataString(s ?? string.Empty);
+                var url = $"{SmsGatewayUrl}?username={enc(Username)}&token={enc(Token)}" +
+                          $"&dests={enc(phone)}&body={enc(body)}" +
+                          $"&priority=0&delay=0&validity=0&maxParts=0&dlr=0&prevDups=0" +
+                          $"&src={enc(Sender)}";
 
-                tracing.Trace($"SMS API response: {(int)resp.StatusCode} {content}");
+                using (var http = new HttpClient())
+                {
+                    var resp = http.GetAsync(url).GetAwaiter().GetResult();
+                    var content = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    return $"{(int)resp.StatusCode} {content}";
+                }
+            }
+            catch (Exception ex)
+            {
+                tracing.Trace("SMS sending error: " + ex.Message);
+                return "Error sending SMS: " + ex.Message;
+            }
+        }
 
-                if (!resp.IsSuccessStatusCode)
-                    throw new InvalidPluginExecutionException($"SMS API failed: {resp.StatusCode} {content}");
+        // 🧾 Log Errors into the SAME entity (new_smsnotification)
+        private void LogErrorToSmsNotification(IServiceProvider serviceProvider, Exception ex)
+        {
+            try
+            {
+                var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+                var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+                var service = serviceFactory.CreateOrganizationService(context.UserId);
+
+                var note = new Entity("new_smsnotification");
+                note["new_name"] = "Visitor SMS Error";
+                note["new_issent"] = false;
+                note["new_smsbody"] = ex.Message + (ex.InnerException != null ? " | Inner: " + ex.InnerException.Message : "");
+
+                service.Create(note);
+            }
+            catch
+            {
+                // remain silent to avoid secondary failure
             }
         }
 
         private static class SmsTemplates
         {
-            public static string ForVisitorCreate() =>
-                "عزيزنا المستثمر,\r\n" +
-                "حرصاً منا لرفع مستوى الجودة يسعدنا تقييمكم للخدمة المقدمة عبر مركز الخدمة:";
+            public static string ForVisitorCreate(string visitorNumber)
+            {
+                string baseLink = "https://feedback.crm-esnad.com/visitor";
+                string fullLink = $"{baseLink}?visitorId={Uri.EscapeDataString(visitorNumber ?? string.Empty)}";
+
+                return
+                    "عزيزنا المستثمر،\r\n" +
+                    "حرصاً منا على رفع مستوى الجودة، يسعدنا تقييمكم للخدمة المقدمة عبر مركز الخدمة:\r\n" +
+                    $"{fullLink}";
+            }
         }
     }
 }

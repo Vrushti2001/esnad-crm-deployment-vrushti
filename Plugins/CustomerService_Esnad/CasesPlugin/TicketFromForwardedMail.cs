@@ -1,11 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
-using Microsoft.Xrm.Sdk;
+﻿using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 
 namespace CasesPlugin
@@ -255,7 +256,9 @@ namespace CasesPlugin
                                         var incident = new Entity("incident")
                                         {
                                             ["title"] = subject1,
-                                            ["new_tickettype"] = ticketTypeRef,
+                                            ["new_tickettype"] = new EntityReference(
+                                                                    "new_tickettype",
+                                                                    new Guid("89ae520c-1c5e-f011-a408-ceff10794b56")),
                                             ["description"] = reason,
                                             // ["new_requesttype"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_requesttype", requestType2)),
                                             ["new_beneficiarytype"] = new OptionSetValue(beneficiaryValue),
@@ -332,6 +335,10 @@ namespace CasesPlugin
                                         string requestType = MatchValue(body, @"(?:نوع الطلب|Request Type)[:\-]?\s*(.+?)\s*(?=الموضوع|Subject)");
                                         string subject = MatchValue(body, @"(?:الموضوع|Subject)[:\-]?\s*(.+?)\s*(?=نص الرسالة|Message Text)");
                                         string message = MatchValue(body, @"(?:نص الرسالة|Message Text)[:\-]?\s*([\s\S]+?)(?=تحميل ملفات|Attachments|$)");
+                                        if (requestType == "دعم فني")
+                                        {
+                                            requestType = "دعم تقني";
+                                        }
                                         string normalizedValue = NormalizeInput(requestType);
 
                                         EntityReference customerRef;
@@ -493,7 +500,7 @@ namespace CasesPlugin
         {
            { "استفسار", "استفسار" }, { "Inquiry", "استفسار" },
             { "متابعة طلب", "متابعة طلب" }, { "Follow-up Request", "متابعة طلب" },
-            { "دعم فني", "دعم فني" }, { "Technical Support", "دعم فني" },
+            { "دعم تقني", "دعم تقني" }, { "Technical Support", "دعم تقني" },
             { "اقتراح", "اقتراح" }, { "Suggestion", "اقتراح" },
             { "شكوى", "شكوى" }, { "Complaint", "شكوى" },
             { "مقابلة مسؤول", "مقابلة مسؤول" }, { "Meeting request", "مقابلة مسؤول" },
