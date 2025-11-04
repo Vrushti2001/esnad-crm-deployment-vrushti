@@ -33,7 +33,7 @@ using Microsoft.Xrm.Sdk.Query;
                 Entity caseEntity;
                 try
                 {
-                    caseEntity = service.Retrieve("incident", caseRef.Id, new ColumnSet("ownerid", "title"));
+                    caseEntity = service.Retrieve("incident", caseRef.Id, new ColumnSet("ownerid", "title", "prioritycode"));
                 }
                 catch (Exception ex)
                 {
@@ -48,7 +48,17 @@ using Microsoft.Xrm.Sdk.Query;
                 }
 
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
-                var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+            var priorityOption = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode");
+            if (priorityOption != null)
+            {
+                int priorityValue = priorityOption.Value;
+            }
+            string priorityLabel = null;
+            if (caseEntity.FormattedValues.Contains("prioritycode"))
+            {
+                priorityLabel = caseEntity.FormattedValues["prioritycode"];
+            }
+            var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
                 var userIds = new HashSet<Guid>();
 
                 if (ownerRef.LogicalName == "team")
@@ -117,7 +127,7 @@ using Microsoft.Xrm.Sdk.Query;
                         <p>أولوية المعالجة : حرج</p>
                         <p>يرجى اعتماد التذكرة وفقًا لاتفاقية مستوى الخدمة (SLA) المعتمدة.</p>
                         <p>A new ticket  {caseTitleHtml} has been assigned to your account.</p>
-                        <p>Ticket Priority Level : Urgent</p>
+                        <p>Ticket Priority Level : {priorityLabel}</p>
                         <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p
         
                         <p><img src='{imageUrl}' alt='CRM Logo' style='max-width: 200px;' /></p>

@@ -18,7 +18,7 @@ namespace CustomerService_Esnad
             var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
             var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
             var service = factory.CreateOrganizationService(context.UserId);
-
+            
             tracing.Trace("NotifyAllTeamMembersPlugin execution started.");
 
             try
@@ -32,7 +32,7 @@ namespace CustomerService_Esnad
                 Entity caseEntity;
                 try
                 {
-                    caseEntity = service.Retrieve("incident", caseRef.Id, new ColumnSet("ownerid", "title"));
+                    caseEntity = service.Retrieve("incident", caseRef.Id, new ColumnSet("ownerid", "title", "prioritycode"));
                 }
                 catch (Exception ex)
                 {
@@ -48,6 +48,18 @@ namespace CustomerService_Esnad
 
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
                 var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+                var priorityOption = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode");
+                if (priorityOption != null)
+                {
+                    int priorityValue = priorityOption.Value;
+                }
+                string priorityLabel = null;
+                if (caseEntity.FormattedValues.Contains("prioritycode"))
+                {
+                    priorityLabel = caseEntity.FormattedValues["prioritycode"];
+                }
+
+
                 var userIds = new HashSet<Guid>();
 
                 if (ownerRef.LogicalName == "team")
@@ -115,7 +127,7 @@ namespace CustomerService_Esnad
                         <p>يرجى اعتماد التذكرة وفقاً لاتفاقية مستوى الخدمة</p>
 
                         <p>A new ticket  {caseTitleHtml} has been assigned to your account.</p>
-                        <p>Ticket Priority Level : Urgent</p>
+                        <p>Ticket Priority Level : {priorityLabel}</p>
                         <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p
         
                         <p><img src='{imageUrl}' alt='CRM Logo' style='max-width: 200px;' /></p>
