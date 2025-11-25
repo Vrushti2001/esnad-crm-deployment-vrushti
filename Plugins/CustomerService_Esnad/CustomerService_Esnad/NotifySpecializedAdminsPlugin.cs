@@ -48,20 +48,18 @@ using Microsoft.Xrm.Sdk.Query;
                 }
 
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
-                var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
-
-            // ✅ Get both numeric and formatted values for prioritycode
-            int? priorityValue = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode")?.Value;
+            var priorityOption = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode");
+            if (priorityOption != null)
+            {
+                int priorityValue = priorityOption.Value;
+            }
             string priorityLabel = null;
-
-            // Formatted value (label) will be available only if retrieved with formatted values
             if (caseEntity.FormattedValues.Contains("prioritycode"))
             {
                 priorityLabel = caseEntity.FormattedValues["prioritycode"];
             }
-
-
-            var userIds = new HashSet<Guid>();
+            var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+                var userIds = new HashSet<Guid>();
 
                 if (ownerRef.LogicalName == "team")
                 {

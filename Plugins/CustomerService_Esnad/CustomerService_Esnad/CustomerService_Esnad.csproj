@@ -145,6 +145,7 @@
     <Compile Include="ApprovalAndFowardinglevel1.cs" />
     <Compile Include="ApprovalAndFowardinglevel3.cs" />
     <Compile Include="EmailtoCRMOfficerOnProcessingStage.cs" />
+    <Compile Include="IServiceFactory.cs" />
     <Compile Include="MoveBpfToApprovalStage.cs" />
     <Compile Include="MoveCaseBpfToProcessing.cs" />
     <Compile Include="MoveTicketClosurestage.cs" />
@@ -165,6 +166,7 @@
     <Compile Include="SmsOnCaseClosureState.cs" />
     <Compile Include="SmsOnCaseMilestones1.cs" />
     <Compile Include="SmsOnCaseMilestones.cs" />
+    <Compile Include="SMSOnTicketClosure.cs" />
     <Compile Include="SmsOnVisitorCreate.cs" />
     <Compile Include="TicketCloseEmailToCustomer.cs" />
     <Compile Include="TrackStageDuration.cs" />

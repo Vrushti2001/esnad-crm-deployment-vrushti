@@ -18,7 +18,7 @@ namespace CustomerService_Esnad
             var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
             var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
             var service = factory.CreateOrganizationService(context.UserId);
-
+            
             tracing.Trace("NotifyAllTeamMembersPlugin execution started.");
 
             try
@@ -48,6 +48,18 @@ namespace CustomerService_Esnad
 
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
                 var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+                var priorityOption = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode");
+                if (priorityOption != null)
+                {
+                    int priorityValue = priorityOption.Value;
+                }
+                string priorityLabel = null;
+                if (caseEntity.FormattedValues.Contains("prioritycode"))
+                {
+                    priorityLabel = caseEntity.FormattedValues["prioritycode"];
+                }
+
+
                 var userIds = new HashSet<Guid>();
                 // ✅ Get both numeric and formatted values for prioritycode
                 int? priorityValue = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode")?.Value;
