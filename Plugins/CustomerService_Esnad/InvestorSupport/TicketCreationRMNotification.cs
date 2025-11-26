@@ -31,13 +31,18 @@ using System.Linq;
                     tracing.Trace($"Case ID received from Action: {caseId}");
 
                     // 🔹 Retrieve incident explicitly
-                    var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "ticketnumber", "ownerid"));
+                    var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "ticketnumber", "ownerid", "new_formtype"));
 
                     string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
                     EntityReference ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+                if (!caseEntity.Contains("new_formtype") || ((OptionSetValue)caseEntity["new_formtype"]).Value != 1)
+                {
+                    tracing.Trace("Skipped SMS: new_formtype is not 1.");
+                    return;
+                }
 
-                    // 🔹 Safe retrieval of ticketnumber
-                    string ticketNumber = caseEntity.GetAttributeValue<string>("ticketnumber");
+                // 🔹 Safe retrieval of ticketnumber
+                string ticketNumber = caseEntity.GetAttributeValue<string>("ticketnumber");
                     if (string.IsNullOrEmpty(ticketNumber) && caseEntity.FormattedValues.Contains("ticketnumber"))
                     {
                         ticketNumber = caseEntity.FormattedValues["ticketnumber"];

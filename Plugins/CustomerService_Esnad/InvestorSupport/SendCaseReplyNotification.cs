@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.IdentityModel.Metadata;
 
 namespace CustomerService_Esnad
 {
@@ -35,6 +36,9 @@ namespace CustomerService_Esnad
                 // Get case title
                 var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title"));
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
+                string Ticketnumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? " ";
+                string companyName = caseEntity.GetAttributeValue<string>("new_companeyname") ?? "";
+
 
                 // Get all users in the team
                 var teamUsersQuery = new QueryExpression("teammembership")
@@ -89,17 +93,37 @@ namespace CustomerService_Esnad
                 string orgUrl = GetOrgURL(service, tracing);
                 string caseUrl = $"{orgUrl}{caseId}";
                 string caseTitleHtml = $"<a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>";
+                string logoUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
+
 
                 string emailBody = $@"
 <html>
-  <body>
-    
-    <p>📝 <strong>Customer has responded to the ticket:</strong> {caseTitleHtml}</p>
-    <p>يرجى مراجعة الرد واتخاذ الإجراءات اللازمة.</p>
-    <p><img src='https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg' alt='CRM Logo' style='max-width: 200px;' /></p>
-  </body>
-</html>";
+  <body style='font-family:Tahoma, Arial, sans-serif; direction:rtl; text-align:right;'>
 
+    <p>مدير العلاقة،</p>
+
+    <p>
+      تم الرد على التذكرة 
+      <b>
+        <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{Ticketnumber}</a>
+      </b>
+      لشركة 
+      <b>{companyName}</b>.
+    </p>
+
+    <p>
+      يرجى التحقق من الحل واغلاق التذكرة وفقاً لإتفاقية مستوى الخدمة (SLA) المعتمدة.
+    </p>
+
+    <p>
+      <img src='{logoUrl}' alt='CRM Logo' style='max-width:200px;' />
+    </p>
+
+  </body>
+</html>
+                ";
+
+               
                 var email = new Entity("email")
                 {
                     ["subject"] = $"Customer Response for - {caseTitle}",

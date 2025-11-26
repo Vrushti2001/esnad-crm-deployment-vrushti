@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 
-namespace Taadeen.Crm.Plugins
+namespace InvestorSupport
 {
     public class SmsOnCaseMilestones : IPlugin
     {
@@ -37,8 +37,11 @@ namespace Taadeen.Crm.Plugins
                 if (context.MessageName.Equals("Create", StringComparison.OrdinalIgnoreCase))
                 {
                     var id = (Guid)context.OutputParameters["id"];
-                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode"));
-                    SendForCreate(incident, tracing, service);
+                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode","new_formtype", "new_rmname", "new_rmphonenumber", "new_rmemail", "new_companeyname"));
+                    if (incident.Contains("new_formtype") && ((OptionSetValue)incident["new_formtype"]).Value == 1)
+                        SendForCreate(incident, tracing, service);
+                    else
+                        tracing.Trace("Skipped SMS: new_formtype is not 1.");
                 }
                 else if (context.MessageName.Equals("Update", StringComparison.OrdinalIgnoreCase))
                 {
@@ -49,7 +52,14 @@ namespace Taadeen.Crm.Plugins
                         return;
 
                     var id = target.Id;
-                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode"));
+                    Entity incident = service.Retrieve("incident", id, new ColumnSet(
+                         "ticketnumber", "customerid", "statuscode", "new_formtype", "new_rmname", "new_rmphonenumber", "new_rmemail", "new_companeyname"));
+
+                    if (!incident.Contains("new_formtype") || ((OptionSetValue)incident["new_formtype"]).Value != 1)
+                    {
+                        tracing.Trace("Skipped SMS: new_formtype is not 1.");
+                        return;
+                    }
 
                     int? oldStatus = null;
                     if (context.PreEntityImages.Contains("PreImage") && context.PreEntityImages["PreImage"].Contains("statuscode"))
@@ -86,7 +96,10 @@ namespace Taadeen.Crm.Plugins
                 var ticket = incident.GetAttributeValue<string>("ticketnumber");
                 var phone = ResolvePhone(incident, tracing, service);
                 var customerRef = incident.GetAttributeValue<EntityReference>("customerid");
-
+                string rmName = incident.GetAttributeValue<string>("new_rmname") ?? "";
+                string rmPhone = incident.GetAttributeValue<string>("new_rmphonenumber") ?? "";
+                string rmEmail = incident.GetAttributeValue<string>("new_rmemail") ?? "";
+                string companyName = incident.GetAttributeValue<string>("new_companeyname") ?? "";
                 if (string.IsNullOrWhiteSpace(ticket))
                     return;
 
@@ -96,7 +109,7 @@ namespace Taadeen.Crm.Plugins
                     return;
                 }
 
-                var message = SmsTemplates.ForTicketCreation(ticket);
+                var message = SmsTemplates.ForTicketCreation(ticket, rmName, rmPhone, rmEmail, companyName, customerRef);
                 var sent = SendSms(service, tracing, phone, message, "Ticket Creation", incident.Id, customerRef);
                 CreateSmsNote(service, "Ticket Creation", message, incident.Id, customerRef, sent);
             }
@@ -113,6 +126,10 @@ namespace Taadeen.Crm.Plugins
                 var ticket = incident.GetAttributeValue<string>("ticketnumber");
                 var phone = ResolvePhone(incident, tracing, service);
                 var customerRef = incident.GetAttributeValue<EntityReference>("customerid");
+                string rmName = incident.GetAttributeValue<string>("new_rmname") ?? "";
+                string rmPhone = incident.GetAttributeValue<string>("new_rmphonenumber") ?? "";
+                string rmEmail = incident.GetAttributeValue<string>("new_rmemail") ?? "";
+                string companyName = incident.GetAttributeValue<string>("new_companeyname") ?? "";
 
                 if (string.IsNullOrWhiteSpace(ticket))
                     return;
@@ -125,12 +142,12 @@ namespace Taadeen.Crm.Plugins
                 var nameofstage = "Status Update";
                 string message = null;
                 if (newStatus == STATUS_RETURN_TO_CUSTOMER) {
-                    message = SmsTemplates.ForReturnToCustomer(ticket);
+                    message = SmsTemplates.ForReturnToCustomer(ticket, rmName, rmPhone, rmEmail, companyName, customerRef);
                     nameofstage = "Return to Customer";
                 }   
                 else if (newStatus == STATUS_SOLUTION_VERIFICATION)
                 {
-                    message = SmsTemplates.ForSolutionVerification(ticket);
+                    message = SmsTemplates.ForSolutionVerification(ticket, rmName, rmPhone, rmEmail, companyName, customerRef);
                     nameofstage = "Solution verification";
                 }
                     
@@ -263,14 +280,48 @@ namespace Taadeen.Crm.Plugins
             private const string PDF = "\u202C"; // Pop Directional Formatting
             private const string RLM = "\u200F"; // RTL Mark
 
-            public static string ForTicketCreation(string ticket) =>
-                $"{RLE}عزيزنا المستثمر,\r\nنشكر لكم تواصلكم معنا، تم إنشاء تذكرة جديدة برقم {RLM}{ticket}.{PDF}";
+            public static string ForTicketCreation(string ticket,
+                                                    string rmName,
+                                                    string rmPhone,
+                                                    string rmEmail,
+                                                    string companyName,
+                                                    EntityReference customerRef) =>
+               $"{RLE}شريكنا المستثمر،\r\n" +
+               $"تم إنشاء تذكرة جديدة برقم {RLM}{ticket}{PDF} لشركة {RLM}{companyName}{PDF}.\r\n" +
+               "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+               "نسعد بخدمتكم،\r\n" +
+               $"{RLM}{rmName}{PDF}\r\n" +
+               $"{RLM}{rmPhone}{PDF}\r\n" +
+               $"{RLM}{rmEmail}{PDF}";
 
-            public static string ForReturnToCustomer(string ticket) =>
-                $"{RLE}عزيزنا المستثمر,\r\nتم إعادة التذكرة رقم {RLM}{ticket} لاستكمال بعض المتطلبات، يرجى استكمالها عبر البريد الإلكتروني.{PDF}";
-
-            public static string ForSolutionVerification(string ticket) =>
-                $"{RLE}عزيزنا المستثمر،\r\nتم معالجة التذكرة رقم {RLM}{ticket}. في حال استمرار المشكلة يرجى الرد عبر البريد الإلكتروني.{PDF}";
+            public static string ForReturnToCustomer(string ticket,
+                                                    string rmName,
+                                                    string rmPhone,
+                                                    string rmEmail,
+                                                    string companyName,
+                                                    EntityReference customerRef) =>
+               $"{RLE}شريكنا المستثمر {customerRef}،\r\n" +
+               $"نود إشعاركم أنه تم إعادة التذكرة رقم {RLM}{ticket}{PDF} لاستكمال بعض المتطلبات اللازمة.\r\n" +
+               "يرجى التكرم بالرد على البريد الإلكتروني المرسل خلال خمسة أيام عمل، حيث سيتم إغلاق التذكرة تلقائيًا في حال عدم الاستجابة.\r\n" +
+               "نسعد بخدمتكم،\r\n" +
+               "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+               $"{RLM}{rmName}{PDF}\r\n" +
+               $"{RLM}{rmPhone}{PDF}\r\n" +
+               $"{RLM}{rmEmail}{PDF}";
+            public static string ForSolutionVerification(string ticket,
+                                                        string rmName,
+                                                        string rmPhone,
+                                                        string rmEmail,
+                                                        string companyName,
+                                                        EntityReference customerRef) =>
+                $"{RLE}شريكنا المستثمر {customerRef}،\r\n" +
+               $"نود إشعاركم بأنه تمت معالجة التذكرة رقم {RLM}{ticket}{PDF}.\r\n" +
+               "نأمل منكم التحقق من الحل المقدم، وفي حال استمرار المشكلة يرجى إفادتنا بذلك.\r\n" +
+               "يرجى ملاحظة أن التذكرة ستغلق تلقائيًا خلال خمسة أيام عمل في حال عدم الرد.\r\n" +
+               "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+               $"{RLM}{rmName}{PDF}\r\n" +
+               $"{RLM}{rmPhone}{PDF}\r\n" +
+               $"{RLM}{rmEmail}{PDF}";
         }
     }
 }

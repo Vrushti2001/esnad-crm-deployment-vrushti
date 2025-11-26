@@ -35,8 +35,7 @@ namespace InvestorSupport
                     isKI = "No";
                     if (isKI == "No")
                     {
-                        incident["new_formtype"] = new OptionSetValue(1);
-                        incident["prioritycode"] = new OptionSetValue(2);
+                        incident["new_formtype"] = new OptionSetValue(0);
                     }
                     service.Update(incident);
 
@@ -68,7 +67,9 @@ namespace InvestorSupport
                     
                     if(isKI == "Yes")
                     {
-                        incident["new_formtype"] = new OptionSetValue(0);
+                       
+                        incident["new_formtype"] = new OptionSetValue(1);
+                        incident["prioritycode"] = new OptionSetValue(2);
                     }
                     service.Update(incident);
 

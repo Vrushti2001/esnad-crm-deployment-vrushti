@@ -2,10 +2,12 @@
 using System.Linq;
 using System.Net.Http;
 using System.Text.RegularExpressions;
+using System.Web.Configuration;
+using System.Xml.Linq;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 
-namespace CustomerService_Esnad
+namespace InvestorSupport
 {
     public class SMSOnTicketClosure : IPlugin
     {
@@ -35,17 +37,27 @@ namespace CustomerService_Esnad
                 Guid caseId = caseRef.Id;
 
                 // Retrieve the incident record
-                var incident = service.Retrieve("incident", caseId, new ColumnSet("ticketnumber", "customerid"));
+                var incident = service.Retrieve("incident", caseId, new ColumnSet("ticketnumber", "customerid", "new_formtype","new_rmname", "new_rmphonenumber", "new_rmemail","new_companeyname"));
                 if (incident == null)
                 {
                     CreateErrorLog(service, "Ticket Closure", "Incident not found with provided ID.", caseId, null);
                     return;
                 }
+                if (!incident.Contains("new_formtype") || ((OptionSetValue)incident["new_formtype"]).Value != 1)
+                {
+                    tracing.Trace("Skipped SMS: new_formtype is not 1.");
+                    return;
+                }
 
-                string ticket = incident.GetAttributeValue<string>("ticketnumber");
+                string ticketNumber = incident.GetAttributeValue<string>("ticketnumber");
                 var customerRef = incident.GetAttributeValue<EntityReference>("customerid");
+               
+                string rmName = incident.GetAttributeValue<string>("new_rmname") ?? "";
+                string rmPhone = incident.GetAttributeValue<string>("new_rmphonenumber") ?? "";
+                string rmEmail = incident.GetAttributeValue<string>("new_rmemail") ?? "";
+                string companyName = incident.GetAttributeValue<string>("new_companeyname") ?? "";
 
-                if (string.IsNullOrWhiteSpace(ticket))
+                if (string.IsNullOrWhiteSpace(ticketNumber))
                 {
                     CreateErrorLog(service, "Ticket Closure", "Ticket number missing. Cannot send SMS.", caseId, customerRef);
                     return;
@@ -69,7 +81,8 @@ namespace CustomerService_Esnad
                 string feedbackBaseUrl = GetConfigValue(service, "FeedbackBaseUrl") ?? "https://feedback.crm-esnad.com";
 
                 // 🔹 Prepare SMS message
-                string smsBody = SmsTemplates.ForTicketClosure(ticket, feedbackBaseUrl);
+                string smsBody = SmsTemplates.ForTicketClosure(ticketNumber, feedbackBaseUrl,
+                                        rmName, rmPhone, rmEmail, companyName, customerRef);
 
                 // 🔹 Send SMS
                 bool sent = SendSms(service, tracing, phone, smsBody, caseId, customerRef);
@@ -231,10 +244,21 @@ namespace CustomerService_Esnad
             private const string PDF = "\u202C"; // Pop Directional Formatting
             private const string RLM = "\u200F"; // Right-to-Left Mark
 
-            public static string ForTicketClosure(string ticket, string baseUrl) =>
-                $"{RLE}عزيزنا المستثمر,\r\n" +
-                $"تم اغلاق التذكرة رقم {RLM}{ticket} وحرصاً منا لرفع مستوى الجودة يسعدنا تقييمكم للخدمة المقدمة:\r\n" +
-                $"{PDF}{baseUrl}?ticketNumber={ticket}";
+            public static string ForTicketClosure(string ticket,
+                string baseUrl,
+                string rmName,
+                string rmPhone,
+                string rmEmail,
+                string companyName,
+                EntityReference customerRef) =>
+                $"{RLE}شريكنا المستثمر {customerRef}،\r\n" +
+                $"نود إشعاركم بأنه تم اغلاق التذكرة رقم {RLM}{ticket}{PDF}.\r\n" +
+                $"وحرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة: ({baseUrl}?ticketNumber={ticket})\r\n" +
+                $"نسعد بخدمتكم،\r\n" +
+                $"مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+                $"{rmName}\r\n" +
+                $"{rmPhone}\r\n" +
+                $"{rmEmail}{PDF}";
         }
     }
 }

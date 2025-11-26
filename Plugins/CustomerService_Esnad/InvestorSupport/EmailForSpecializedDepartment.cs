@@ -6,7 +6,7 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace InvestorSupport
 {
-    public class NotifySpecializedAdminsPlugin : IPlugin
+    public class EmailForSpecializedDepartment : IPlugin
     {
         //use for other team assignment notification
         public void Execute(IServiceProvider serviceProvider)
@@ -123,17 +123,24 @@ namespace InvestorSupport
                 // ✅ Include the image using <img src="">
                 string emailBody = $@"
                     <html>
-                      <body>
-                     
-                       <p>تم اسناد تذكرة جديدة رقم {caseTitleHtml} في حسابكم.</p>
-                        <p>أولوية المعالجة : {priorityLabel}</p>
-                        <p>يرجى اعتماد التذكرة وفقًا لاتفاقية مستوى الخدمة (SLA) المعتمدة.</p>
-                        <p>A new ticket  {caseTitleHtml} has been assigned to your account.</p>
-                        <p>Ticket Priority Level : {priorityLabel}</p>
-                        <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p
-        
-                        <p><img src='{imageUrl}' alt='CRM Logo' style='max-width: 200px;' /></p>
-                      </body>
+                        <body style='font-family:Segoe UI, Tahoma, sans-serif; font-size:14px;'>
+                            <div dir='rtl' style='text-align:right; margin-bottom:20px;'>
+                                <p>تم اسناد تذكرة جديدة  {caseUrl} في حسابكم.</p>
+                                  <p>أولوية المعالجة : {priorityLabel}</p>
+                                  <p>يرجى معالجة التذكرة وفقًا لاتفاقية مستوى الخدمة (SLA) المعتمدة.</p>
+                            </div>
+
+                            <hr style='border:0; border-top:1px solid #ccc; margin:20px 0;' />
+
+                            <div dir='ltr' style='text-align:left; margin-top:20px;'>
+                                <p>A new ticket   {caseUrl}  has been assigned to your Team.</p>
+                                  <p>Ticket Priority Level : {priorityLabel}</p>
+                                  <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p>
+                                                            <p>
+                                    <img src='{imageUrl}' alt='CRM Logo' style='width:200px; margin-bottom:10px;' />
+                                </p>
+                            </div>
+                        </body>
                     </html>";
 
                 var email = new Entity("email")
@@ -211,7 +218,7 @@ namespace InvestorSupport
                 <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
                   <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
                     <filter>
-                      <condition attribute='name' operator='eq' value='Esnad: Specialized Dept. Officer' />
+                      <condition attribute='name' operator='eq' value=''KI: Relationship Manager' />
                     </filter>
                   </link-entity>
                 </link-entity>

@@ -4,8 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Xml.Linq;
 
-namespace CustomerService_Esnad
+namespace InvestorSupport
 {
     public class SLALevel4 : IPlugin
     {
@@ -43,7 +44,8 @@ namespace CustomerService_Esnad
                 string Ticketnumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? " ";
                 EntityReference ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
                 tracing.Trace($"Case Owner: {ownerRef.Name}, Type: {ownerRef.LogicalName}");
-
+               
+                string rmName = caseEntity.GetAttributeValue<string>("new_rmname") ?? " ";
 
                 // Fetch CRM Admin user (sender of the email)
                 Entity crmAdminUser = GetCRMAdminUser(service);
@@ -63,7 +65,7 @@ namespace CustomerService_Esnad
                 {
                     string teamName = ownerRef.Name;
                     tracing.Trace("Owner is a Team. Sending email to the team members.");
-                    SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, ownerRef.Id, caseUrl, Ticketnumber, teamName, tracing);
+                    SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, rmName, ownerRef.Id, caseUrl, Ticketnumber, teamName, tracing);
                 }
                 else if (ownerRef.LogicalName == "systemuser")
                 {
@@ -75,7 +77,7 @@ namespace CustomerService_Esnad
                     {
                         string teamName = team.GetAttributeValue<string>("name");
                         tracing.Trace($"Processing team: {team.GetAttributeValue<string>("name")}");
-                        SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, team.Id, caseUrl, Ticketnumber, teamName ,tracing);
+                        SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, rmName, team.Id, caseUrl, Ticketnumber, teamName ,tracing);
                     }
                 }
 
@@ -88,7 +90,7 @@ namespace CustomerService_Esnad
             }
         }
 
-        private void SendEmailToTeam(IOrganizationService service, Entity crmAdminUser, Entity fromParty, Guid caseId, string caseTitle, EntityReference ownerRef, Guid teamId, string caseUrl, string TicketNumber, string teamName , ITracingService tracing)
+        private void SendEmailToTeam(IOrganizationService service, Entity crmAdminUser, Entity fromParty, Guid caseId, string caseTitle, EntityReference ownerRef, string rmName, Guid teamId, string caseUrl, string TicketNumber, string teamName , ITracingService tracing)
         {
             // Fetch the Department Manager, Sector Head, and CEO for the team
            // var departmentManagers = GetDepartmentManagerInTeam(service, teamId, tracing);
@@ -125,14 +127,14 @@ namespace CustomerService_Esnad
             }
 
             // Create the email subject and body
-            string subject = $"[Processing SLA Escalation Level 3] Case Breach Alert - {caseTitle}";
+            string subject = $"[Processing SLA Escalation Level 4] Case Breach Alert - {caseTitle}";
             string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
             var email = new Entity("email")
             {
                 ["subject"] = subject,
                 ["description"] = $@"
-          <html>
+<html>
   <body style='font-family:Segoe UI, Tahoma, sans-serif; font-size:14px;'>
 
     <!-- Arabic section -->
@@ -142,11 +144,11 @@ namespace CustomerService_Esnad
       <p>عنوان التذكرة:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>المسؤول عنها:{teamName}</p>
+      <p>المسؤول عنها: {rmName}</p>
       <p>رقم التذكرة: {TicketNumber}</p>
       <p>يرجى اتخاذ الإجراءات اللازمة حسب آلية التصعيد المعتمدة لضمان سرعة المعالجة.</p>
       <p>شكرًا لتعاونكم،</p>
-      <p>مركز دعم المستثمرين لقطاع التعدين</p>
+      <p>مركز دعم كبار المستثمرين – قطاع التعدين</p>
     </div>
 
     <hr style='border:0; border-top:1px solid #ccc; margin:20px 0;' />
@@ -158,7 +160,7 @@ namespace CustomerService_Esnad
       <p>Ticket Title:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>Responsible Team: {teamName}</p>
+      <p>Responsible: {rmName}</p>
       <p>Ticket Number: {TicketNumber}</p>
       <p>Please take the necessary actions according to the approved escalation procedure to ensure prompt handling.</p>
       <br/>
