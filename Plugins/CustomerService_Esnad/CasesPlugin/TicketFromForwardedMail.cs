@@ -88,7 +88,7 @@ namespace CasesPlugin
                                                      body,
                                                      @"(?<=\r?\n\r?\n)(?:الامتثال|Compliance)\s*\r?\n\s*([^\r\n]+)"
                                                  );
-
+                                        string isKI = "No";
                                         string licenseType = MatchValueForAppointment(
                                                     body,
                                                     @"(?<=\r?\n\r?\n)(?:الرخص|Licenses)\s*\r?\n\s*([^\r\n]+)"
@@ -153,7 +153,21 @@ namespace CasesPlugin
 
                                             if (result.Entities.Count > 0)
                                             {
+                                                // account was found
                                                 accountId = result.Entities[0].Id;
+
+                                                // Retrieve the account with the relationship manager field (in case it wasn't in the original query)
+                                                var existingAccount = service.Retrieve("account", accountId, new ColumnSet("new_relationshipmanager"));
+
+                                                // Check whether new_relationshipmanager lookup is present and non-null
+                                                if (existingAccount != null &&
+                                                    existingAccount.Contains("new_relationshipmanager") &&
+                                                    existingAccount.GetAttributeValue<EntityReference>("new_relationshipmanager") != null)
+                                                {
+                                                    // set a flag you can use later when creating the incident
+                                                    // use the correct field logical name on the incident (here: new_iski)
+                                                    isKI = "yes";
+                                                }
                                             }
                                             else
                                             {
@@ -310,7 +324,15 @@ namespace CasesPlugin
                                             //incident["new_compliance"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_compliance", complianceType));
                                             incident["new_compliance"] = new OptionSetValue(ComplianceValue);
                                         }
-
+                                        if (isKI == "yes")
+                                        {
+                                            incident["new_formtype"] = new OptionSetValue(1);
+                                            incident["prioritycode"] = new OptionSetValue(2);
+                                        }
+                                        else
+                                        {
+                                            incident["new_formtype"] = new OptionSetValue(0);
+                                        }
 
                                         //incident["new_sector"] = new OptionSetValue(GetOptionSetValue(service, "incident", "new_sector", department));
                                         incident["new_sector"] = new OptionSetValue(SectorValue);
@@ -340,7 +362,7 @@ namespace CasesPlugin
                                             requestType = "دعم تقني";
                                         }
                                         string normalizedValue = NormalizeInput(requestType);
-
+                                       string isKI = "No";
                                         EntityReference customerRef;
 
                                         // === Contact or Account ===
@@ -382,14 +404,32 @@ namespace CasesPlugin
                                                 Criteria = new FilterExpression
                                                 {
                                                     Conditions = {
-                                                        new ConditionExpression("name", ConditionOperator.Equal, company)
+                                                        new ConditionExpression("emailaddress1", ConditionOperator.Equal, emailAddr)
                                                     }
                                                 }
                                             };
                                             var result = service.RetrieveMultiple(query);
                                             Guid accountId;
                                             if (result.Entities.Count > 0)
+                                            {
+                                                // account was found
                                                 accountId = result.Entities[0].Id;
+                                                
+                                                // Retrieve the account with the relationship manager field (in case it wasn't in the original query)
+                                                var existingAccount = service.Retrieve("account", accountId, new ColumnSet("new_relationshipmanager"));
+
+                                                // Check whether new_relationshipmanager lookup is present and non-null
+                                                if (existingAccount != null &&
+                                                    existingAccount.Contains("new_relationshipmanager") &&
+                                                    existingAccount.GetAttributeValue<EntityReference>("new_relationshipmanager") != null)
+                                                {
+                                                    // set a flag you can use later when creating the incident
+                                                    // use the correct field logical name on the incident (here: new_iski)
+                                                    isKI = "yes";
+                                                }
+                                            }
+                                             
+
                                             else
                                             {
                                                 var account = new Entity("account")
@@ -414,7 +454,14 @@ namespace CasesPlugin
                                             ["new_ticketsubmissionchannel"] = new OptionSetValue(4),
                                             ["transactioncurrencyid"] = new EntityReference("transactioncurrency", new Guid("70FA9BC3-6D4B-F011-A3FE-D4DE6FAB9C57"))
                                         };
-
+                                        if (isKI == "yes") {
+                                            incident["new_formtype"] = new OptionSetValue(1);
+                                            incident["prioritycode"] = new OptionSetValue(2);
+                                        }
+                                        else
+                                        {
+                                            incident["new_formtype"] = new OptionSetValue(0);
+                                        }
                                         Entity updateEmail = new Entity("email")
                                         {
                                             Id = email.Id,
