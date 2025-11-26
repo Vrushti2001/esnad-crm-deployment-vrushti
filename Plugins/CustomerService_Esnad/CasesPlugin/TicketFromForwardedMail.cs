@@ -157,8 +157,7 @@ namespace CasesPlugin
                                             }
                                             else
                                             {
-                                                //phone2 = "0711000474";
-                                                //CRN = "L24205BR19";
+                                              
                                                 var account = new Entity("account")
                                                 {
                                                     ["name"] = companyName,

@@ -1,34 +1,37 @@
-﻿using Microsoft.Xrm.Sdk.Query;
-using Microsoft.Xrm.Sdk;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Collections.Generic;
+using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 
-namespace CustomerService_Esnad
+namespace InvestorSupport
 {
-    public class SendEmailToCustomerServiceTeam : IPlugin
+    public class NotifySpecializedAdminsPlugin : IPlugin
     {
-        //Plugin to notify CST that ticket created and assign to you.
-      
+        //use for other team assignment notification
         public void Execute(IServiceProvider serviceProvider)
         {
             var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
             var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
             var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
             var service = factory.CreateOrganizationService(context.UserId);
-            
-            tracing.Trace("NotifyAllTeamMembersPlugin execution started.");
+
+            tracing.Trace("NotifySpecializedAdminsPlugin execution started.");
 
             try
             {
-                if (!context.InputParameters.Contains("CaseId") || !(context.InputParameters["CaseId"] is EntityReference caseRef))
+                // Input validation
+                EntityReference caseRef;
+                if (context.InputParameters.Contains("CaseId") && context.InputParameters["CaseId"] is EntityReference)
                 {
-                    tracing.Trace("CaseId parameter missing or invalid.");
-                    return;
+                    caseRef = (EntityReference)context.InputParameters["CaseId"];
+                }
+                else
+                {
+                    caseRef = new EntityReference(context.PrimaryEntityName, context.PrimaryEntityId);
                 }
 
+                // Retrieve Case
                 Entity caseEntity;
                 try
                 {
@@ -45,34 +48,24 @@ namespace CustomerService_Esnad
                     tracing.Trace("Owner not found on case.");
                     return;
                 }
-                int priorityValue = 0;
+
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
-                var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
                 var priorityOption = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode");
                 if (priorityOption != null)
                 {
-                     priorityValue = priorityOption.Value;
+                    int priorityValue = priorityOption.Value;
                 }
                 string priorityLabel = null;
                 if (caseEntity.FormattedValues.Contains("prioritycode"))
                 {
                     priorityLabel = caseEntity.FormattedValues["prioritycode"];
                 }
-
-
+                var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
                 var userIds = new HashSet<Guid>();
-                // ✅ Get both numeric and formatted values for prioritycode
-                
-
-                // Formatted value (label) will be available only if retrieved with formatted values
-                if (caseEntity.FormattedValues.Contains("prioritycode"))
-                {
-                    priorityLabel = caseEntity.FormattedValues["prioritycode"];
-                }
 
                 if (ownerRef.LogicalName == "team")
                 {
-                    var users = GetAllTeamUsers(service, ownerRef.Id, tracing);
+                    var users = GetSpecializedAdminsInTeam(service, ownerRef.Id, tracing);
                     foreach (var u in users) userIds.Add(u.Id);
                 }
                 else if (ownerRef.LogicalName == "systemuser")
@@ -80,14 +73,14 @@ namespace CustomerService_Esnad
                     var teamIds = GetUserTeams(service, ownerRef.Id, tracing);
                     foreach (var teamId in teamIds)
                     {
-                        var users = GetAllTeamUsers(service, teamId, tracing);
+                        var users = GetSpecializedAdminsInTeam(service, teamId, tracing);
                         foreach (var u in users) userIds.Add(u.Id);
                     }
                 }
 
                 if (!userIds.Any())
                 {
-                    tracing.Trace("No users found in associated teams.");
+                    tracing.Trace("No specialized admin users found.");
                     return;
                 }
 
@@ -96,6 +89,7 @@ namespace CustomerService_Esnad
                     ["partyid"] = new EntityReference("systemuser", id)
                 }).ToList();
 
+                // Fetch sender user: "CRM-ESNAD\\crmadmin"
                 Entity crmAdminUser = service.RetrieveMultiple(new QueryExpression("systemuser")
                 {
                     ColumnSet = new ColumnSet("systemuserid", "internalemailaddress"),
@@ -130,10 +124,10 @@ namespace CustomerService_Esnad
                 string emailBody = $@"
                     <html>
                       <body>
-                       
-                        <p>تم انشاء تذكرة جديدة رقم {caseTitleHtml}</p>
-                        <p>يرجى اعتماد التذكرة وفقاً لاتفاقية مستوى الخدمة</p>
-
+                     
+                       <p>تم اسناد تذكرة جديدة رقم {caseTitleHtml} في حسابكم.</p>
+                        <p>أولوية المعالجة : {priorityLabel}</p>
+                        <p>يرجى اعتماد التذكرة وفقًا لاتفاقية مستوى الخدمة (SLA) المعتمدة.</p>
                         <p>A new ticket  {caseTitleHtml} has been assigned to your account.</p>
                         <p>Ticket Priority Level : {priorityLabel}</p>
                         <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p
@@ -144,7 +138,7 @@ namespace CustomerService_Esnad
 
                 var email = new Entity("email")
                 {
-                    ["subject"] = "Case Assigned to Customer Service Team",
+                    ["subject"] = "Case Assigned to your Team",
                     ["description"] = emailBody,
                     ["directioncode"] = true,
                     ["from"] = new EntityCollection(new[] { fromParty }),
@@ -153,9 +147,11 @@ namespace CustomerService_Esnad
                     ["statuscode"] = new OptionSetValue(1) // Draft
                 };
 
+
                 Guid emailId = service.Create(email);
                 tracing.Trace("Email created. ID: " + emailId);
 
+                // Force send the email
                 var sendRequest = new OrganizationRequest("SendEmail");
                 sendRequest["EmailId"] = emailId;
                 sendRequest["IssueSend"] = true;
@@ -163,20 +159,11 @@ namespace CustomerService_Esnad
 
                 service.Execute(sendRequest);
                 tracing.Trace("Email sent via SendEmailRequest.");
-
-                // ✅ Update the case with its own GUID in 'new_copycaseguid'
-                Entity updateCase = new Entity("incident");
-                updateCase.Id = caseRef.Id;
-                updateCase["new_copycaseguid"] = caseRef.Id.ToString(); // ensure field type is Text
-
-                service.Update(updateCase);
-                tracing.Trace("Updated incident with new_copycaseguid = " + caseRef.Id.ToString());
-
             }
             catch (Exception ex)
             {
-                tracing.Trace("NotifyAllTeamMembersPlugin error: " + ex.ToString());
-                throw new InvalidPluginExecutionException("Failed to notify team members.", ex);
+                tracing.Trace("NotifySpecializedAdminsPlugin error: " + ex.ToString());
+                // throw new InvalidPluginExecutionException("Failed to notify Specialized Admin Staff.", ex);
             }
         }
 
@@ -204,7 +191,7 @@ namespace CustomerService_Esnad
             }
         }
 
-        private List<Entity> GetAllTeamUsers(IOrganizationService service, Guid teamId, ITracingService tracing)
+        private List<Entity> GetSpecializedAdminsInTeam(IOrganizationService service, Guid teamId, ITracingService tracing)
         {
             try
             {
@@ -221,16 +208,23 @@ namespace CustomerService_Esnad
                     <condition attribute='teamid' operator='eq' value='{teamId}' />
                   </filter>
                 </link-entity>
+                <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+                  <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
+                    <filter>
+                      <condition attribute='name' operator='eq' value='Esnad: Specialized Dept. Officer' />
+                    </filter>
+                  </link-entity>
+                </link-entity>
               </entity>
             </fetch>";
 
                 var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
-                tracing.Trace($"Found {result.Entities.Count} users in team {teamId}");
+                tracing.Trace($"Found {result.Entities.Count} specialized admin users in team {teamId}");
                 return result.Entities.ToList();
             }
             catch (Exception ex)
             {
-                tracing.Trace("Error in GetAllTeamUsers: " + ex.Message);
+                tracing.Trace("Error in GetSpecializedAdminsInTeam: " + ex.Message);
                 throw;
             }
         }
@@ -264,6 +258,7 @@ namespace CustomerService_Esnad
                 throw new InvalidPluginExecutionException("No record found for 'OrgURL' in 'new_environmentvariable' entity.");
             }
         }
-
     }
 }
+
+
