@@ -422,3 +422,4 @@ FodyWeavers.xsd
 *.msm
 *.msp
 /Plugins/CustomerService_Esnad/CustomerService_Esnad/SmsOnCaseMilestones1.cs
+/Plugins/CustomerService_Esnad/InvestorSupport/Investorkey.snk
