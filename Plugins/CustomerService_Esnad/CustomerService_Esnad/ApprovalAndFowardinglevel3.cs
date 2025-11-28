@@ -34,11 +34,14 @@ namespace CustomerService_Esnad
 
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
                 string Ticketnumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? " ";
-                EntityReference ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
-                tracing.Trace($"Case Owner: {ownerRef.Name}, Type: {ownerRef.LogicalName}");
 
-                    // Fetch crmadmin as sender
-                    Entity crmAdminUser = GetCRMAdminUser(service);
+                // 🔹 1. Get static Team as owner (by name)
+                string staticTeamName = "Customer Service Management Team";   // <<< CHANGE THIS TO YOUR TEAM NAME
+                EntityReference ownerRef = GetTeamByName(service, staticTeamName, tracing);
+
+
+                // Fetch crmadmin as sender
+                Entity crmAdminUser = GetCRMAdminUser(service);
                     if (crmAdminUser == null)
                         throw new InvalidPluginExecutionException("CRM Admin user not found or missing email.");
 
@@ -49,26 +52,26 @@ namespace CustomerService_Esnad
 
                     string orgURL = GetOrgURL(service);
                     string caseUrl = $"{orgURL}{caseId}";
+                // 🔹 4. Always treat owner as Team (because we set it as static team)
+                if (ownerRef.LogicalName == "team")
+                {
+                    tracing.Trace("Using static Team as owner. Sending email to Sector Head in this team.");
+                    SendEmailToTeam(
+                        service,
+                        crmAdminUser,
+                        fromParty,
+                        caseId,
+                        caseTitle,
+                        ownerRef,               // ownerRef is the team
+                        ownerRef.Id,            // team Id
+                        caseUrl,
+                        Ticketnumber,
+                        tracing,
+                        ownerRef.Name           // team name
+                    );
+                }
 
-                    if (ownerRef.LogicalName == "team")
-                    {
-                        tracing.Trace("Owner is a Team. Sending email to Sector Head in this team.");
-                        SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, ownerRef.Id, caseUrl, Ticketnumber, tracing, ownerRef.Name);
-                    }
-                    else if (ownerRef.LogicalName == "systemuser")
-                    {
-                        tracing.Trace("Owner is a User. Fetching user's teams...");
-                        var teams = GetUserTeams(service, ownerRef.Id, tracing);
-                        tracing.Trace($"Found {teams.Count} teams for user.");
-
-                        foreach (var team in teams)
-                        {
-                            tracing.Trace($"Processing team: {team.GetAttributeValue<string>("name")}");
-                            SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, team.Id, caseUrl, Ticketnumber, tracing, team.GetAttributeValue<string>("name"));
-                        }
-                    }
-
-                    tracing.Trace("SLALevel1Escalation Plugin execution completed.");
+                tracing.Trace("SLALevel1Escalation Plugin execution completed.");
                 }
                 catch (Exception ex)
                 {
@@ -247,5 +250,37 @@ namespace CustomerService_Esnad
 
                 throw new InvalidPluginExecutionException("OrgURL environment variable not found.");
             }
+        private EntityReference GetTeamByName(
+    IOrganizationService service,
+    string teamName,
+    ITracingService tracing)
+        {
+            var query = new QueryExpression("team")
+            {
+                ColumnSet = new ColumnSet("teamid", "name")
+            };
+
+            query.Criteria.AddCondition("name", ConditionOperator.Equal, teamName);
+
+            var result = service.RetrieveMultiple(query);
+
+            if (result.Entities.Count == 0)
+            {
+                throw new InvalidPluginExecutionException(
+                    $"Team '{teamName}' not found in CRM.");
+            }
+
+            var team = result.Entities[0];
+            var teamNameActual = team.GetAttributeValue<string>("name");
+
+            tracing.Trace($"Static team resolved: {teamNameActual} ({team.Id})");
+
+            // Set Name so ownerRef.Name is not null in tracing
+            return new EntityReference("team", team.Id)
+            {
+                Name = teamNameActual
+            };
         }
+
     }
+}

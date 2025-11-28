@@ -251,7 +251,7 @@ namespace InvestorSupport
                 string rmEmail,
                 string companyName,
                 EntityReference customerRef) =>
-                $"{RLE}شريكنا المستثمر {customerRef}،\r\n" +
+                $"{RLE}شريكنا المستثمر {customerRef?.Name}،\r\n" +
                 $"نود إشعاركم بأنه تم اغلاق التذكرة رقم {RLM}{ticket}{PDF}.\r\n" +
                 $"وحرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة: ({baseUrl}?ticketNumber={ticket})\r\n" +
                 $"نسعد بخدمتكم،\r\n" +

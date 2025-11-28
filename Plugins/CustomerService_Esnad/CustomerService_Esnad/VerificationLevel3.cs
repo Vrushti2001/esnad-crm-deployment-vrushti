@@ -39,8 +39,11 @@ namespace CustomerService_Esnad
                     }
 
                     string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
-                    EntityReference ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
-                    string TicketNumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? "(No number)";
+                // 🔹 1. Get static Team as owner (by name)
+                string staticTeamName = "Customer Service Management Team";   // <<< CHANGE THIS TO YOUR TEAM NAME
+                EntityReference ownerRef = GetTeamByName(service, staticTeamName, tracing);
+
+                string TicketNumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? "(No number)";
                     tracing.Trace($"Case Owner: {ownerRef.Name}, Type: {ownerRef.LogicalName}");
 
                     // Fetch crmadmin as sender
@@ -253,5 +256,36 @@ namespace CustomerService_Esnad
 
                 throw new InvalidPluginExecutionException("OrgURL environment variable not found.");
             }
+        private EntityReference GetTeamByName(
+  IOrganizationService service,
+  string teamName,
+  ITracingService tracing)
+        {
+            var query = new QueryExpression("team")
+            {
+                ColumnSet = new ColumnSet("teamid", "name")
+            };
+
+            query.Criteria.AddCondition("name", ConditionOperator.Equal, teamName);
+
+            var result = service.RetrieveMultiple(query);
+
+            if (result.Entities.Count == 0)
+            {
+                throw new InvalidPluginExecutionException(
+                    $"Team '{teamName}' not found in CRM.");
+            }
+
+            var team = result.Entities[0];
+            var teamNameActual = team.GetAttributeValue<string>("name");
+
+            tracing.Trace($"Static team resolved: {teamNameActual} ({team.Id})");
+
+            // Set Name so ownerRef.Name is not null in tracing
+            return new EntityReference("team", team.Id)
+            {
+                Name = teamNameActual
+            };
         }
+    }
     }

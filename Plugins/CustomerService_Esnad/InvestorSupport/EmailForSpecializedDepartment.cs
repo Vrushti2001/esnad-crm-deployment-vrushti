@@ -8,7 +8,7 @@ namespace InvestorSupport
 {
     public class EmailForSpecializedDepartment : IPlugin
     {
-        //use for other team assignment notification
+        // use for other team assignment notification
         public void Execute(IServiceProvider serviceProvider)
         {
             var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
@@ -50,16 +50,20 @@ namespace InvestorSupport
                 }
 
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
+
                 var priorityOption = caseEntity.GetAttributeValue<OptionSetValue>("prioritycode");
                 if (priorityOption != null)
                 {
                     int priorityValue = priorityOption.Value;
+                    // use priorityValue if needed
                 }
+
                 string priorityLabel = null;
                 if (caseEntity.FormattedValues.Contains("prioritycode"))
                 {
                     priorityLabel = caseEntity.FormattedValues["prioritycode"];
                 }
+
                 var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
                 var userIds = new HashSet<Guid>();
 
@@ -96,10 +100,10 @@ namespace InvestorSupport
                     Criteria = new FilterExpression
                     {
                         Conditions =
-                    {
-                        new ConditionExpression("domainname", ConditionOperator.Equal, "CRM-ESNAD\\crmadmin"),
-                        new ConditionExpression("accessmode", ConditionOperator.Equal, 0)
-                    }
+                        {
+                            new ConditionExpression("domainname", ConditionOperator.Equal, "CRM-ESNAD\\crmadmin"),
+                            new ConditionExpression("accessmode", ConditionOperator.Equal, 0)
+                        }
                     }
                 }).Entities.FirstOrDefault();
 
@@ -115,28 +119,26 @@ namespace InvestorSupport
                 };
 
                 string OrgURL = GetOrgURL(service);
-                //string caseUrl = $"https://d365.crm-esnad.com/main.aspx?appid=0d3f8ee3-bd6f-4d2a-8205-8b8d5021b809&pagetype=entityrecord&etn=incident&id={caseRef.Id}";
-                string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg"; // Use HTTPS if possible
-                string caseUrl = $"{OrgURL}{caseRef.Id}";  // Concatenate the OrgURL and Case Id
+                string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
+                string caseUrl = $"{OrgURL}{caseRef.Id}";
                 string caseTitleHtml = $"<a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>";
 
-                // ✅ Include the image using <img src="">
                 string emailBody = $@"
                     <html>
                         <body style='font-family:Segoe UI, Tahoma, sans-serif; font-size:14px;'>
                             <div dir='rtl' style='text-align:right; margin-bottom:20px;'>
-                                <p>تم اسناد تذكرة جديدة  {caseUrl} في حسابكم.</p>
-                                  <p>أولوية المعالجة : {priorityLabel}</p>
-                                  <p>يرجى معالجة التذكرة وفقًا لاتفاقية مستوى الخدمة (SLA) المعتمدة.</p>
+                                <p>تم اسناد تذكرة جديدة  {caseTitleHtml} في حسابكم.</p>
+                                <p>أولوية المعالجة : {priorityLabel}</p>
+                                <p>يرجى معالجة التذكرة وفقًا لاتفاقية مستوى الخدمة (SLA) المعتمدة.</p>
                             </div>
 
                             <hr style='border:0; border-top:1px solid #ccc; margin:20px 0;' />
 
                             <div dir='ltr' style='text-align:left; margin-top:20px;'>
-                                <p>A new ticket   {caseUrl}  has been assigned to your Team.</p>
-                                  <p>Ticket Priority Level : {priorityLabel}</p>
-                                  <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p>
-                                                            <p>
+                                <p>A new ticket  {caseTitleHtml} has been assigned to your Team.</p>
+                                <p>Ticket Priority Level : {priorityLabel}</p>
+                                <p>Kindly process the ticket in accordance with the approved Service Level Agreement (SLA).</p>
+                                <p>
                                     <img src='{imageUrl}' alt='CRM Logo' style='width:200px; margin-bottom:10px;' />
                                 </p>
                             </div>
@@ -154,15 +156,15 @@ namespace InvestorSupport
                     ["statuscode"] = new OptionSetValue(1) // Draft
                 };
 
-
                 Guid emailId = service.Create(email);
                 tracing.Trace("Email created. ID: " + emailId);
 
-                // Force send the email
-                var sendRequest = new OrganizationRequest("SendEmail");
-                sendRequest["EmailId"] = emailId;
-                sendRequest["IssueSend"] = true;
-                sendRequest["TrackingToken"] = "";
+                var sendRequest = new OrganizationRequest("SendEmail")
+                {
+                    ["EmailId"] = emailId,
+                    ["IssueSend"] = true,
+                    ["TrackingToken"] = ""
+                };
 
                 service.Execute(sendRequest);
                 tracing.Trace("Email sent via SendEmailRequest.");
@@ -170,6 +172,7 @@ namespace InvestorSupport
             catch (Exception ex)
             {
                 tracing.Trace("NotifySpecializedAdminsPlugin error: " + ex.ToString());
+                // No popup to user:
                 // throw new InvalidPluginExecutionException("Failed to notify Specialized Admin Staff.", ex);
             }
         }
@@ -218,7 +221,7 @@ namespace InvestorSupport
                 <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
                   <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
                     <filter>
-                      <condition attribute='name' operator='eq' value=''KI: Relationship Manager' />
+                      <condition attribute='name' operator='eq' value='KI: Relationship Manager' />
                     </filter>
                   </link-entity>
                 </link-entity>
@@ -235,30 +238,26 @@ namespace InvestorSupport
                 throw;
             }
         }
+
         private string GetOrgURL(IOrganizationService service)
         {
-            // Create a query to find the record where "new_name" equals "OrgURL"
             var query = new QueryExpression("new_environmentvariable")
             {
                 ColumnSet = new ColumnSet("new_value"),
                 Criteria = new FilterExpression
                 {
                     Conditions =
-                {
-                    new ConditionExpression("new_name", ConditionOperator.Equal, "OrgURL")
-                }
+                    {
+                        new ConditionExpression("new_name", ConditionOperator.Equal, "OrgURL")
+                    }
                 }
             };
 
-            // Retrieve the record
             EntityCollection result = service.RetrieveMultiple(query);
 
-            // Check if the result contains any matching records
             if (result.Entities.Count > 0)
             {
-                // Get the "new_value" field value from the first matching record
-                string orgURL = result.Entities[0].GetAttributeValue<string>("new_value");
-                return orgURL;
+                return result.Entities[0].GetAttributeValue<string>("new_value");
             }
             else
             {
@@ -267,5 +266,3 @@ namespace InvestorSupport
         }
     }
 }
-
-

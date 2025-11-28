@@ -287,7 +287,7 @@ namespace InvestorSupport
                                                     string companyName,
                                                     EntityReference customerRef) =>
                $"{RLE}شريكنا المستثمر،\r\n" +
-               $"تم إنشاء تذكرة جديدة برقم {RLM}{ticket}{PDF} لشركة {RLM}{companyName}{PDF}.\r\n" +
+               $"تم إنشاء تذكرة جديدة برقم {RLM}{ticket}{PDF} لشركة {RLM}{customerRef?.Name}{PDF}.\r\n" +
                "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
                "نسعد بخدمتكم،\r\n" +
                $"{RLM}{rmName}{PDF}\r\n" +
@@ -300,7 +300,7 @@ namespace InvestorSupport
                                                     string rmEmail,
                                                     string companyName,
                                                     EntityReference customerRef) =>
-               $"{RLE}شريكنا المستثمر {customerRef}،\r\n" +
+               $"{RLE}شريكنا المستثمر {customerRef?.Name}،\r\n" +
                $"نود إشعاركم أنه تم إعادة التذكرة رقم {RLM}{ticket}{PDF} لاستكمال بعض المتطلبات اللازمة.\r\n" +
                "يرجى التكرم بالرد على البريد الإلكتروني المرسل خلال خمسة أيام عمل، حيث سيتم إغلاق التذكرة تلقائيًا في حال عدم الاستجابة.\r\n" +
                "نسعد بخدمتكم،\r\n" +
@@ -314,7 +314,7 @@ namespace InvestorSupport
                                                         string rmEmail,
                                                         string companyName,
                                                         EntityReference customerRef) =>
-                $"{RLE}شريكنا المستثمر {customerRef}،\r\n" +
+                $"{RLE}شريكنا المستثمر {customerRef?.Name}،\r\n" +
                $"نود إشعاركم بأنه تمت معالجة التذكرة رقم {RLM}{ticket}{PDF}.\r\n" +
                "نأمل منكم التحقق من الحل المقدم، وفي حال استمرار المشكلة يرجى إفادتنا بذلك.\r\n" +
                "يرجى ملاحظة أن التذكرة ستغلق تلقائيًا خلال خمسة أيام عمل في حال عدم الرد.\r\n" +
