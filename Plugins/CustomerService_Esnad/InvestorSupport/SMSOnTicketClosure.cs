@@ -6,6 +6,7 @@ using System.Web.Configuration;
 using System.Xml.Linq;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using static System.Net.WebRequestMethods;
 
 namespace InvestorSupport
 {
@@ -253,7 +254,7 @@ namespace InvestorSupport
                 EntityReference customerRef) =>
                 $"{RLE}شريكنا المستثمر {customerRef?.Name}،\r\n" +
                 $"نود إشعاركم بأنه تم اغلاق التذكرة رقم {RLM}{ticket}{PDF}.\r\n" +
-                $"وحرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة: ({baseUrl}?ticketNumber={ticket})\r\n" +
+                $"وحرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة: {baseUrl}/KITicket?ticketnumber={ticket}\r\n" + 
                 $"نسعد بخدمتكم،\r\n" +
                 $"مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
                 $"{rmName}\r\n" +

@@ -75,12 +75,43 @@ namespace CustomerService_Esnad
                 {
                     tracingService.Trace("Customer is an account. Retrieving account details...");
                     Entity account = service.Retrieve("account", customerRef.Id,
-                        new ColumnSet("name", "emailaddress1", "new_companyrepresentativephonenumber", "new_crnumber"));
+                        new ColumnSet("name", "emailaddress1", "new_companyrepresentativephonenumber", "new_crnumber", "new_relationshipmanager"));
 
                     update["new_email"] = account.GetAttributeValue<string>("emailaddress1") ?? string.Empty;
                     update["new_phonenumber"] = account.GetAttributeValue<string>("new_companyrepresentativephonenumber") ?? string.Empty;
                     update["new_companeyname"] = account.GetAttributeValue<string>("name") ?? string.Empty;
                     update["new_crnumber"] = account.GetAttributeValue<string>("new_crnumber") ?? string.Empty;
+                   
+                    if (!account.Attributes.Contains("new_relationshipmanager"))
+                    {
+                         update["new_formtype"] = new OptionSetValue(0);
+                    }
+                    else
+                    {
+                        EntityReference rmRef = account.GetAttributeValue<EntityReference>("new_relationshipmanager");
+                        Entity rmUser = service.Retrieve("systemuser", rmRef.Id,
+                                    new ColumnSet("fullname", "internalemailaddress", "mobilephone"));
+                        if (rmUser != null)
+                        {
+                            if (rmUser.Contains("fullname"))
+                                update["new_rmname"] = rmUser.GetAttributeValue<string>("fullname");
+
+                            if (rmUser.Contains("internalemailaddress"))
+                                update["new_rmemail"] = rmUser.GetAttributeValue<string>("internalemailaddress");
+
+                            if (rmUser.Contains("mobilephone"))
+                                update["new_rmphonenumber"] = rmUser.GetAttributeValue<string>("mobilephone");
+
+                            // If you want RM lookup on Incident too
+                            update["new_tciketrelationshipmanager"] = rmRef;
+
+                            update["new_formtype"] = new OptionSetValue(1);
+                            update["prioritycode"] = new OptionSetValue(2);
+                         
+                        }
+
+                    }
+
                 }
                 else
                 {

@@ -71,8 +71,7 @@ namespace InvestorSupport
                         incident["new_formtype"] = new OptionSetValue(1);
                         incident["prioritycode"] = new OptionSetValue(2);
                     }
-                    service.Update(incident);
-
+                    
                 }
             }
         }

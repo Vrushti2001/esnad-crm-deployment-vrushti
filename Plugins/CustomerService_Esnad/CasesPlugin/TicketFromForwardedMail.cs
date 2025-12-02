@@ -444,12 +444,29 @@ namespace CasesPlugin
                                         }
 
                                         EntityReference ticketTypeRef = GetTicketType(service, normalizedValue);
+                                        int beneficiaryValue = -1;
+                                        if (beneficiaryType.Equals("فرد", StringComparison.OrdinalIgnoreCase) ||
+                                            beneficiaryType.Equals("Individual", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            beneficiaryValue = 1; // فرد / Individual
+                                        }
+                                        else if (beneficiaryType.Equals("شركة", StringComparison.OrdinalIgnoreCase) ||
+                                                 beneficiaryType.Equals("Company", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            beneficiaryValue = 2; // شركة / Company
+                                        }
+                                        else if (beneficiaryType.Equals("مستثمر", StringComparison.OrdinalIgnoreCase) ||
+                                                 beneficiaryType.Equals("Investor", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            beneficiaryValue = 2; // مستثمر / Investor
+                                        }
 
                                         var incident = new Entity("incident")
                                         {
                                             ["title"] = subject,
                                             ["description"] = message,
                                             ["new_tickettype"] = ticketTypeRef,
+                                            ["new_beneficiarytype"] = new OptionSetValue(beneficiaryValue),
                                             ["customerid"] = customerRef,
                                             ["new_ticketsubmissionchannel"] = new OptionSetValue(4),
                                             ["transactioncurrencyid"] = new EntityReference("transactioncurrency", new Guid("70FA9BC3-6D4B-F011-A3FE-D4DE6FAB9C57"))
