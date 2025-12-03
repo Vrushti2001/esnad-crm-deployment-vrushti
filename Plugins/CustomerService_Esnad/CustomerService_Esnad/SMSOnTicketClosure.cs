@@ -35,12 +35,14 @@ namespace CustomerService_Esnad
                 Guid caseId = caseRef.Id;
 
                 // Retrieve the incident record
-                var incident = service.Retrieve("incident", caseId, new ColumnSet("ticketnumber", "customerid"));
+                var incident = service.Retrieve("incident", caseId, new ColumnSet("ticketnumber", "customerid", "new_formtype"));
                 if (incident == null)
                 {
                     CreateErrorLog(service, "Ticket Closure", "Incident not found with provided ID.", caseId, null);
                     return;
                 }
+                if (incident.Contains("new_formtype") && ((OptionSetValue)incident["new_formtype"]).Value == 1)
+                    return;
 
                 string ticket = incident.GetAttributeValue<string>("ticketnumber");
                 var customerRef = incident.GetAttributeValue<EntityReference>("customerid");

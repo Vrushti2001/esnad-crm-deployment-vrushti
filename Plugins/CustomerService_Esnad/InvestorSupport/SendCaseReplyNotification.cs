@@ -34,7 +34,7 @@ namespace InvestorSupport
                 var teamId = teamRef.Id;
 
                 // Get case title
-                var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title"));
+                var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "ticketnumber", "new_companeyname"));
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
                 string Ticketnumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? " ";
                 string companyName = caseEntity.GetAttributeValue<string>("new_companeyname") ?? "";
@@ -97,30 +97,30 @@ namespace InvestorSupport
 
 
                 string emailBody = $@"
-<html>
-  <body style='font-family:Tahoma, Arial, sans-serif; direction:rtl; text-align:right;'>
+                <html>
+                  <body style='font-family:Tahoma, Arial, sans-serif; direction:rtl; text-align:right;'>
 
-    <p>مدير العلاقة،</p>
+                    <p>مدير العلاقة،</p>
 
-    <p>
-      تم الرد على التذكرة 
-      <b>
-        <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{Ticketnumber}</a>
-      </b>
-      لشركة 
-      <b>{companyName}</b>.
-    </p>
+                    <p>
+                      تم الرد على التذكرة 
+                      <b>
+                        <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{Ticketnumber}</a>
+                      </b>
+                      لشركة 
+                      <b>{companyName}</b>.
+                    </p>
 
-    <p>
-      يرجى التحقق من الحل واغلاق التذكرة وفقاً لإتفاقية مستوى الخدمة (SLA) المعتمدة.
-    </p>
+                    <p>
+                      يرجى التحقق من الحل واغلاق التذكرة وفقاً لإتفاقية مستوى الخدمة (SLA) المعتمدة.
+                    </p>
 
-    <p>
-      <img src='{logoUrl}' alt='CRM Logo' style='max-width:200px;' />
-    </p>
+                    <p>
+                      <img src='{logoUrl}' alt='CRM Logo' style='max-width:200px;' />
+                    </p>
 
-  </body>
-</html>
+                  </body>
+                </html>
                 ";
 
                

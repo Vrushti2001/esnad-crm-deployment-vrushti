@@ -37,7 +37,10 @@ namespace Taadeen.Crm.Plugins
                 if (context.MessageName.Equals("Create", StringComparison.OrdinalIgnoreCase))
                 {
                     var id = (Guid)context.OutputParameters["id"];
-                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode"));
+                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode","new_formtype"));
+                    if (incident.Contains("new_formtype") && ((OptionSetValue)incident["new_formtype"]).Value == 1)
+                        return;
+
                     SendForCreate(incident, tracing, service);
                 }
                 else if (context.MessageName.Equals("Update", StringComparison.OrdinalIgnoreCase))
@@ -49,7 +52,9 @@ namespace Taadeen.Crm.Plugins
                         return;
 
                     var id = target.Id;
-                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode"));
+                    var incident = service.Retrieve("incident", id, new ColumnSet("ticketnumber", "customerid", "statuscode", "new_formtype"));
+                    if (incident.Contains("new_formtype") && ((OptionSetValue)incident["new_formtype"]).Value == 1)
+                        return;
 
                     int? oldStatus = null;
                     if (context.PreEntityImages.Contains("PreImage") && context.PreEntityImages["PreImage"].Contains("statuscode"))
