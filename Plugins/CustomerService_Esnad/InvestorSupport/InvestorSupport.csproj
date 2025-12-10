@@ -130,6 +130,7 @@
     <Compile Include="ApprovalAndFowardinglevel2.cs" />
     <Compile Include="ApprovalAndFowardinglevel3.cs" />
     <Compile Include="EmailForSpecializedDepartment.cs" />
+    <Compile Include="EmailOnKIComunicationcreate .cs" />
     <Compile Include="Processing-Leval1.cs" />
     <Compile Include="Processing-Level2.cs" />
     <Compile Include="Processing-Level3.cs" />
@@ -137,6 +138,8 @@
     <Compile Include="SendCaseReplyNotification.cs" />
     <Compile Include="SetRMDetailsOnIncident.cs" />
     <Compile Include="SmsOnCaseMilestones.cs" />
+    <Compile Include="smsOnCustomernotReply.cs" />
+    <Compile Include="smsOnKIComunicationcreate.cs" />
     <Compile Include="SMSOnTicketClosure.cs" />
     <Compile Include="TicketCreationRMNotification.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

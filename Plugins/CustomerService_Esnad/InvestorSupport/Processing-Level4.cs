@@ -3,335 +3,264 @@ using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Xml.Linq;
 
 namespace InvestorSupport
 {
     public class SLALevel4 : IPlugin
     {
+        // Logical name of the incident text field where we'll store recipient info (change if needed)
+        private const string RecipientFieldOnIncident = "new_notificationusersprocessingl4";
+        // Role name that identifies CEO
+        private const string CeoRoleName = "Esnad: CEO";
+        // Environment variable logical name to read Org URL (optional)
+        private const string OrgUrlEnvName = "OrgURL";
+
         public void Execute(IServiceProvider serviceProvider)
         {
-            // Get the context
-            IPluginExecutionContext context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
-            ITracingService tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
-            IOrganizationServiceFactory factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-            IOrganizationService service = factory.CreateOrganizationService(context.UserId);
+            // Context & services
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var service = factory.CreateOrganizationService(context.UserId);
 
-            tracing.Trace("SLALevel4 Escalation Plugin execution started.");
+            tracing.Trace("SLALevel4: execution started.");
 
             try
             {
-                // Get Case ID from InputParameters
+                // Expecting "Target" EntityReference (incident)
                 if (!context.InputParameters.Contains("Target") || !(context.InputParameters["Target"] is EntityReference caseRef))
                 {
-                    tracing.Trace("CaseId not found in input parameters.");
+                    tracing.Trace("SLALevel4: Target not provided or not an EntityReference; exiting.");
                     return;
                 }
 
                 Guid caseId = caseRef.Id;
-                tracing.Trace($"Processing Case ID: {caseId}");
+                tracing.Trace($"SLALevel4: CaseId = {caseId}");
 
-                // Retrieve Case details
-                var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "ticketnumber", "ownerid"));
-                if (!caseEntity.Contains("ownerid"))
+                // Retrieve incident (include rm name if present)
+                var incident = service.Retrieve("incident", caseId, new ColumnSet("title", "ticketnumber", "ownerid", "new_rmname"));
+                if (incident == null)
                 {
-                    tracing.Trace("Case does not have an owner. Exiting.");
+                    tracing.Trace("SLALevel4: Incident not found; exiting.");
                     return;
                 }
 
-                string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
-                string Ticketnumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? " ";
-                EntityReference ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
-                tracing.Trace($"Case Owner: {ownerRef.Name}, Type: {ownerRef.LogicalName}");
-               
-                string rmName = caseEntity.GetAttributeValue<string>("new_rmname") ?? " ";
+                string caseTitle = incident.GetAttributeValue<string>("title") ?? "(No Title)";
+                string ticketNumber = incident.GetAttributeValue<string>("ticketnumber") ?? "(No Number)";
+                string rmName = incident.GetAttributeValue<string>("new_rmname") ?? "";
+                EntityReference ownerRef = incident.GetAttributeValue<EntityReference>("ownerid");
 
-                // Fetch CRM Admin user (sender of the email)
-                Entity crmAdminUser = GetCRMAdminUser(service);
-                if (crmAdminUser == null)
-                    throw new InvalidPluginExecutionException("CRM Admin user not found or missing email.");
+                tracing.Trace($"SLALevel4: Case title='{caseTitle}', ticket='{ticketNumber}', rmName='{rmName}'");
 
-                var fromParty = new Entity("activityparty")
+                // Find crmadmin user for 'from' party (fallback to initiating user later)
+                var crmAdmin = GetCrmAdminUser(service);
+                Guid fromUserId = crmAdmin != null ? crmAdmin.Id : context.InitiatingUserId;
+                tracing.Trace($"SLALevel4: using fromUserId = {fromUserId} (crmadmin present: {crmAdmin != null})");
+
+                var fromParty = new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", fromUserId) };
+
+                // Build case URL (if env var found)
+                string orgUrl = GetOrgURLSafe(service, tracing);
+                string caseUrl = string.IsNullOrEmpty(orgUrl) ? "" : $"{orgUrl}{caseId}";
+
+                // Get the CEO
+                var ceo = GetCEO(service, tracing);
+                if (ceo == null)
                 {
-                    ["partyid"] = new EntityReference("systemuser", crmAdminUser.Id)
+                    tracing.Trace("SLALevel4: CEO not found. Updating incident field and exiting without sending email.");
+                    SafeUpdateIncidentRecipientField(service, caseId, "No CEO found", tracing);
+                    return;
+                }
+
+                // Compose recipient display string
+                string ceoName = ceo.GetAttributeValue<string>("fullname") ?? ceo.Id.ToString();
+                string ceoEmail = ceo.GetAttributeValue<string>("internalemailaddress") ?? "";
+                string recipientDisplay = string.IsNullOrWhiteSpace(ceoEmail) ? ceoName : $"{ceoName} <{ceoEmail}>";
+
+                tracing.Trace($"SLALevel4: CEO found: {recipientDisplay}");
+
+                // Store recipient info on incident (truncate to CRM text limits)
+                SafeUpdateIncidentRecipientField(service, caseId, recipientDisplay, tracing);
+
+                // Build 'to' activityparty list — only CEO
+                var toParties = new List<Entity>
+                {
+                    new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", ceo.Id) }
                 };
 
-                string orgURL = GetOrgURL(service);
-                string caseUrl = $"{orgURL}{caseId}";
+                // Build email entity
+                string subject = $"[Processing SLA Escalation Level 4] Case Breach Alert - {caseTitle}";
+                string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
-                // Determine if the case owner is a team or a user
-                if (ownerRef.LogicalName == "team")
-                {
-                    string teamName = ownerRef.Name;
-                    tracing.Trace("Owner is a Team. Sending email to the team members.");
-                    SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, rmName, ownerRef.Id, caseUrl, Ticketnumber, teamName, tracing);
-                }
-                else if (ownerRef.LogicalName == "systemuser")
-                {
-                    tracing.Trace("Owner is a User. Fetching user's teams...");
-                    var teams = GetUserTeams(service, ownerRef.Id, tracing);
-                    tracing.Trace($"Found {teams.Count} teams for user.");
-
-                    foreach (var team in teams)
-                    {
-                        string teamName = team.GetAttributeValue<string>("name");
-                        tracing.Trace($"Processing team: {team.GetAttributeValue<string>("name")}");
-                        SendEmailToTeam(service, crmAdminUser, fromParty, caseId, caseTitle, ownerRef, rmName, team.Id, caseUrl, Ticketnumber, teamName ,tracing);
-                    }
-                }
-
-                tracing.Trace("SLALevel4 Escalation Plugin execution completed.");
-            }
-            catch (Exception ex)
-            {
-                tracing.Trace("Error: " + ex.ToString());
-                throw new InvalidPluginExecutionException("Failed in SLALevel3 Escalation plugin.", ex);
-            }
-        }
-
-        private void SendEmailToTeam(IOrganizationService service, Entity crmAdminUser, Entity fromParty, Guid caseId, string caseTitle, EntityReference ownerRef, string rmName, Guid teamId, string caseUrl, string TicketNumber, string teamName , ITracingService tracing)
-        {
-            // Fetch the Department Manager, Sector Head, and CEO for the team
-           // var departmentManagers = GetDepartmentManagerInTeam(service, teamId, tracing);
-         //   var sectorHeads = GetSectorHeadInTeam(service, teamId, tracing);
-            var ceo = GetCEO(service, tracing);
-
-            var toParties = new List<Entity>();
-
-            //// Add Department Managers to email recipients
-            //foreach (var manager in departmentManagers)
-            //{
-            //    toParties.Add(new Entity("activityparty")
-            //    {
-            //        ["partyid"] = new EntityReference("systemuser", manager.Id)
-            //    });
-            //}
-
-            //// Add Sector Heads to email recipients
-            //foreach (var head in sectorHeads)
-            //{
-            //    toParties.Add(new Entity("activityparty")
-            //    {
-            //        ["partyid"] = new EntityReference("systemuser", head.Id)
-            //    });
-            //}
-
-            // Add CEO to email recipients
-            if (ceo != null)
-            {
-                toParties.Add(new Entity("activityparty")
-                {
-                    ["partyid"] = new EntityReference("systemuser", ceo.Id)
-                });
-            }
-
-            // Create the email subject and body
-            string subject = $"[Processing SLA Escalation Level 4] Case Breach Alert - {caseTitle}";
-            string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
-
-            var email = new Entity("email")
-            {
-                ["subject"] = subject,
-                ["description"] = $@"
+                var description = $@"
 <html>
   <body style='font-family:Segoe UI, Tahoma, sans-serif; font-size:14px;'>
-
-    <!-- Arabic section -->
     <div dir='rtl' style='text-align:right; margin-bottom:20px;'>
       <p>مع التحية والتقدير،</p>
       <p>نود إعلامكم بأن التذكرة التالية قد تجاوزت المدة المحددة في اتفاقية مستوى الخدمة (SLA):</p>
-      <p>عنوان التذكرة:
-        <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
-      </p>
-      <p>المسؤول عنها: {rmName}</p>
-      <p>رقم التذكرة: {TicketNumber}</p>
-      <p>يرجى اتخاذ الإجراءات اللازمة حسب آلية التصعيد المعتمدة لضمان سرعة المعالجة.</p>
-      <p>شكرًا لتعاونكم،</p>
-      <p>مركز دعم كبار المستثمرين – قطاع التعدين</p>
+      <p>عنوان التذكرة: <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a></p>
+      <p>المسؤول عنها: {System.Security.SecurityElement.Escape(rmName)}</p>
+      <p>رقم التذكرة: {System.Security.SecurityElement.Escape(ticketNumber)}</p>
     </div>
-
     <hr style='border:0; border-top:1px solid #ccc; margin:20px 0;' />
-
-    <!-- English section -->
     <div dir='ltr' style='text-align:left; margin-top:20px;'>
       <p>With Regards and Appreciation,</p>
-      <p>We would like to inform you that the following ticket has exceeded the time frame specified in the Service Level Agreement (SLA):</p>
-      <p>Ticket Title:
-        <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
-      </p>
-      <p>Responsible: {rmName}</p>
-      <p>Ticket Number: {TicketNumber}</p>
-      <p>Please take the necessary actions according to the approved escalation procedure to ensure prompt handling.</p>
+      <p>Ticket Title: <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a></p>
+      <p>Responsible: {System.Security.SecurityElement.Escape(rmName)}</p>
+      <p>Ticket Number: {System.Security.SecurityElement.Escape(ticketNumber)}</p>
       <br/>
-      <p>Thank you for your cooperation,</p>
+      <p>Thank you,</p>
       <p>Investor Support Center – Mining Sector</p>
-      <p>
-        <img src='{imageUrl}' alt='CRM Logo' style='width:200px; margin-bottom:10px;' />
-      </p>
+      <p><img src='{imageUrl}' alt='Logo' style='width:200px;' /></p>
     </div>
-
   </body>
-</html>",
-                ["directioncode"] = true,
-                ["from"] = new EntityCollection(new[] { fromParty }),
-                ["to"] = new EntityCollection(toParties),
-                ["regardingobjectid"] = new EntityReference("incident", caseId),
-                ["statuscode"] = new OptionSetValue(1) // Draft
+</html>";
+
+                var email = new Entity("email")
+                {
+                    ["subject"] = subject,
+                    ["description"] = description,
+                    ["directioncode"] = true,
+                    ["from"] = new EntityCollection(new[] { fromParty }),
+                    ["to"] = new EntityCollection(toParties),
+                    ["regardingobjectid"] = new EntityReference("incident", caseId)
+                };
+
+                Guid emailId = service.Create(email);
+                tracing.Trace($"SLALevel4: Email created. Id = {emailId}");
+
+                // Send email
+                var sendRequest = new OrganizationRequest("SendEmail");
+                sendRequest["EmailId"] = emailId;
+                sendRequest["IssueSend"] = true;
+                sendRequest["TrackingToken"] = "";
+                service.Execute(sendRequest);
+
+                tracing.Trace("SLALevel4: Email sent successfully to CEO.");
+            }
+            catch (Exception ex)
+            {
+                tracing.Trace("SLALevel4: Exception: " + ex.ToString());
+                throw new InvalidPluginExecutionException("Error in SLALevel4 plugin.", ex);
+            }
+            finally
+            {
+                tracing.Trace("SLALevel4: execution finished.");
+            }
+        }
+
+        /// <summary>
+        /// Safe update of incident recipient field (text). Truncates to 3000 chars to be safe for single-line fields.
+        /// </summary>
+        private void SafeUpdateIncidentRecipientField(IOrganizationService service, Guid incidentId, string recipientText, ITracingService tracing)
+        {
+            try
+            {
+                if (recipientText == null) recipientText = "";
+                const int maxLength = 3000;
+                if (recipientText.Length > maxLength) recipientText = recipientText.Substring(0, maxLength);
+
+                var incidentToUpdate = new Entity("incident", incidentId);
+                incidentToUpdate[RecipientFieldOnIncident] = recipientText;
+                service.Update(incidentToUpdate);
+                tracing.Trace($"SLALevel4: Incident field '{RecipientFieldOnIncident}' updated with recipients.");
+            }
+            catch (Exception uex)
+            {
+                tracing.Trace("SLALevel4: Failed to update incident recipient field: " + uex.ToString());
+                // Do not throw — we still want to attempt sending email if update fails.
+            }
+        }
+
+        /// <summary>
+        /// Finds the CRM user record for crmadmin (fallback sender).
+        /// </summary>
+        private Entity GetCrmAdminUser(IOrganizationService service)
+        {
+            var q = new QueryExpression("systemuser")
+            {
+                ColumnSet = new ColumnSet("systemuserid", "internalemailaddress", "fullname"),
+                Criteria = new FilterExpression()
             };
+            q.Criteria.AddCondition("domainname", ConditionOperator.Equal, "CRM-ESNAD\\crmadmin");
+            q.Criteria.AddCondition("accessmode", ConditionOperator.Equal, 0);
 
-            Guid emailId = service.Create(email);
-            tracing.Trace($"Email created for case ID {caseId}. ID: {emailId}");
-
-            var sendRequest = new OrganizationRequest("SendEmail");
-            sendRequest["EmailId"] = emailId;
-            sendRequest["IssueSend"] = true;
-            sendRequest["TrackingToken"] = "";
-
-            service.Execute(sendRequest);
-            tracing.Trace($"Email sent successfully for case ID {caseId}.");
+            var res = service.RetrieveMultiple(q);
+            return res.Entities.FirstOrDefault();
         }
 
-        private List<Entity> GetUserTeams(IOrganizationService service, Guid userId, ITracingService tracing)
+        /// <summary>
+        /// Returns the first user that has the CEO role (by role name constant). Null if not found.
+        /// </summary>
+        private Entity GetCEO(IOrganizationService service, ITracingService tracing)
         {
-            var fetchXml = $@"
-            <fetch>
-              <entity name='team'>
-                <attribute name='name'/>
-                <attribute name='teamid'/>
-                <link-entity name='teammembership' from='teamid' to='teamid' intersect='true'>
-                  <filter>
-                    <condition attribute='systemuserid' operator='eq' value='{userId}'/>
-                  </filter>
-                </link-entity>
-              </entity>
-            </fetch>";
-
-            var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
-            tracing.Trace($"Found {result.Entities.Count} teams for user {userId}.");
-            return result.Entities.ToList();
-        }
-
-        private List<Entity> GetSectorHeadInTeam(IOrganizationService service, Guid teamId, ITracingService tracing)
-        {
-            var fetchXml = $@"
-<fetch>
+            // Fetch CEO by role name
+            string fetch = $@"
+<fetch top='1'>
   <entity name='systemuser'>
-    <attribute name='systemuserid'/>
-    <attribute name='internalemailaddress'/>
-    <filter>
-      <condition attribute='accessmode' operator='eq' value='0' />
-    </filter>
-    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
-      <filter>
-        <condition attribute='teamid' operator='eq' value='{teamId}' />
-      </filter>
-    </link-entity>
-    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
-      <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
+    <attribute name='systemuserid' />
+    <attribute name='fullname' />
+    <attribute name='internalemailaddress' />
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner' alias='sur'>
+      <link-entity name='role' from='roleid' to='roleid' link-type='inner' alias='r'>
         <filter>
-          <condition attribute='name' operator='eq' value='Esnad: Sector Head' />
+          <condition attribute='name' operator='eq' value='{SecurityEscape(CeoRoleName)}' />
         </filter>
       </link-entity>
     </link-entity>
   </entity>
 </fetch>";
-
-            var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
-            tracing.Trace($"Found {result.Entities.Count} Sector Head in team {teamId}.");
-            return result.Entities.ToList();
-        }
-
-        private List<Entity> GetDepartmentManagerInTeam(IOrganizationService service, Guid teamId, ITracingService tracing)
-        {
-            var fetchXml = $@"
-    <fetch>
-      <entity name='systemuser'>
-        <attribute name='systemuserid'/>
-        <attribute name='internalemailaddress'/>
-        <filter>
-          <condition attribute='accessmode' operator='eq' value='0' />
-        </filter>
-        <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
-          <filter>
-            <condition attribute='teamid' operator='eq' value='{teamId}' />
-          </filter>
-        </link-entity>
-        <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
-          <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
-            <filter>
-              <condition attribute='name' operator='eq' value='Esnad: Department Manager' />
-            </filter>
-          </link-entity>
-        </link-entity>
-      </entity>
-    </fetch>";
-
-            var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
-            tracing.Trace($"Found {result.Entities.Count} Department Managers in team {teamId}.");
-            return result.Entities.ToList();
-        }
-
-        private Entity GetCRMAdminUser(IOrganizationService service)
-        {
-            var query = new QueryExpression("systemuser")
+            try
             {
-                ColumnSet = new ColumnSet("systemuserid", "internalemailaddress"),
-                Criteria = new FilterExpression
+                var coll = service.RetrieveMultiple(new FetchExpression(fetch));
+                if (coll.Entities.Count > 0)
                 {
-                    Conditions =
-                    {
-                        new ConditionExpression("domainname", ConditionOperator.Equal, "CRM-ESNAD\\crmadmin"),
-                        new ConditionExpression("accessmode", ConditionOperator.Equal, 0)
-                    }
+                    tracing.Trace($"SLALevel4: GetCEO found {coll.Entities.Count} record(s).");
+                    return coll.Entities.First();
                 }
-            };
-
-            return service.RetrieveMultiple(query).Entities.FirstOrDefault();
-        }
-
-        private Entity GetCEO(IOrganizationService service, ITracingService tracing)
-        {
-            var fetchXml = $@"
-            <fetch>
-              <entity name='systemuser'>
-                <attribute name='systemuserid'/>
-                <attribute name='internalemailaddress'/>
-                <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
-                  <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
-                    <filter>
-                      <condition attribute='name' operator='eq' value='Esnad: CEO' />
-                    </filter>
-                  </link-entity>
-                </link-entity>
-              </entity>
-            </fetch>";
-
-
-            var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
-            tracing.Trace($"Found {result.Entities.Count} CEO.");
-            return result.Entities.FirstOrDefault();
-        }
-
-        private string GetOrgURL(IOrganizationService service)
-        {
-            var query = new QueryExpression("new_environmentvariable")
+                tracing.Trace("SLALevel4: GetCEO found 0 records.");
+                return null;
+            }
+            catch (Exception ex)
             {
-                ColumnSet = new ColumnSet("new_value"),
-                Criteria = new FilterExpression
+                tracing.Trace("SLALevel4: GetCEO fetch error: " + ex.ToString());
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Read Org URL env var if exists; return empty string on failure.
+        /// </summary>
+        private string GetOrgURLSafe(IOrganizationService service, ITracingService tracing)
+        {
+            try
+            {
+                var q = new QueryExpression("new_environmentvariable")
                 {
-                    Conditions =
-                    {
-                        new ConditionExpression("new_name", ConditionOperator.Equal, "OrgURL")
-                    }
+                    ColumnSet = new ColumnSet("new_value"),
+                    Criteria = new FilterExpression()
+                };
+                q.Criteria.AddCondition("new_name", ConditionOperator.Equal, OrgUrlEnvName);
+                var res = service.RetrieveMultiple(q);
+                if (res.Entities.Count > 0)
+                {
+                    return res.Entities[0].GetAttributeValue<string>("new_value") ?? "";
                 }
-            };
+            }
+            catch (Exception ex)
+            {
+                tracing.Trace("SLALevel4: GetOrgURLSafe error: " + ex.ToString());
+            }
+            return "";
+        }
 
-            EntityCollection result = service.RetrieveMultiple(query);
-            if (result.Entities.Count > 0)
-                return result.Entities[0].GetAttributeValue<string>("new_value");
-
-            throw new InvalidPluginExecutionException("OrgURL environment variable not found.");
+        /// <summary>
+        /// Very small helper to escape single quotes for fetch xml usage.
+        /// </summary>
+        private static string SecurityEscape(string input)
+        {
+            if (input == null) return "";
+            return input.Replace("'", "''");
         }
     }
 }
