@@ -20,6 +20,7 @@ const restrictedStageIds = [
 
 // Special stage
 const specialStageId = "3b5a344f-9f9d-466b-aa08-611e60964b46";
+const ProcessingStageId= "91153307-982f-479d-af7f-73048b80e52c";
 
 let isAllowedUser = false;
 
@@ -101,7 +102,12 @@ function enforceRestrictions(formCtx) {
                 openCommentModal(formCtx);
                 return;
             }
-
+			
+			if (stageId === ProcessingStageId) {
+                e.preventDefault(); e.stopPropagation();
+                alert("⚠️ You are not allowed to move to this stage.");
+                return;
+            }
             // Restricted → block
             if (restrictedStageIds.includes(stageId)) {
                 e.preventDefault(); e.stopPropagation();
@@ -178,51 +184,100 @@ function openCommentModal(formContext) {
 }
 
 function assignCaseToCustomerService(formContext) {
-    const caseId = formContext.data.entity.getId().replace(/[{}]/g, ""); // strip {}
+    const caseId = formContext.data.entity.getId();
     const teamGuids = [
-        "fca3c311-074c-f011-a400-fbb6a348b744", // Production team GUID
-        "2c80efda-7c4b-f011-a3ff-af212fee8ea9"  // Development team GUID
+        "fca3c311-074c-f011-a400-fbb6a348b744", // Production
+        "2c80efda-7c4b-f011-a3ff-af212fee8ea9"  // Development
     ];
 
     function tryAssign(index) {
-        if (index >= teamGuids.length) {
-            console.error("❌ Failed to assign case to any team");
-            return;
-        }
+        if (index >= teamGuids.length) return;
 
-        const teamId = teamGuids[index];
-        const updateData = {
-            "ownerid@odata.bind": `/teams(${teamId})`
-        };
-
-        Xrm.WebApi.updateRecord("incident", caseId, updateData).then(
-            () => {
-                console.log("👥 Case assigned to team:", teamId);
-                formContext.data.refresh(false);
-            },
-            (err) => {
-                console.error("⚠️ Failed assigning to team:", teamId, err.message);
-                tryAssign(index + 1);
-            }
-        );
+        Xrm.WebApi.updateRecord("incident", caseId, {
+            "ownerid@odata.bind": `/teams(${teamGuids[index]})`
+        }).then(() => {
+            console.log("👥 Assigned to team:", teamGuids[index]);
+            formContext.data.refresh(false);
+        }).catch(() => tryAssign(index + 1));
     }
 
     tryAssign(0);
 }
 
 
+// 🔁 Force Processing stage using exact ID
 function activateProcessingStage(formContext) {
     const targetStageName = "Processing";
+
     try {
         const activePath = formContext.data.process.getActivePath();
-        let targetStage = activePath.find(s => s.getName().trim().toLowerCase() === targetStageName.toLowerCase());
-        if (targetStage) {
-            formContext.data.process.setActiveStage(targetStage.getId(), () => {
-                console.log("✅ Stage changed to:", targetStageName);
-            });
+        let targetStage = null;
+
+        for (let i = 0; i < activePath.length; i++) {
+            const s = activePath[i];
+            if (s.getName().trim().toLowerCase() === targetStageName.toLowerCase()) {
+                targetStage = s;
+                break;
+            }
         }
+
+        if (!targetStage) {
+            console.warn("⚠ Stage not found in UI path. Using Web API.");
+            forceChangeViaWebAPI(formContext, targetStageName);
+            return;
+        }
+
+        formContext.data.process.setActiveStage(targetStage.getId(), function (result) {
+            if (result === "success") {
+                console.log("✅ Stage changed to:", targetStageName);
+				bindStageChangeListener(formCtx);
+            } else {
+                forceChangeViaWebAPI(formContext, targetStageName);
+            }
+        });
     } catch (err) {
-        console.error("❌ activateProcessingStage failed:", err.message);
+        console.error("❌ Error in activateProcessingStage:", err.message);
+    }
+}
+
+function forceChangeViaWebAPI(formContext, targetStageName) {
+    try {
+        const instanceId = formContext.data.process.getInstanceId();
+        const processId = formContext.data.process.getActiveProcess().getId();
+        if (!instanceId || !processId) return;
+
+        Xrm.WebApi.retrieveRecord("workflow", processId, "?$select=uniquename").then(function (workflow) {
+            const bpfEntityLogicalName = workflow.uniquename.toLowerCase();
+
+            Xrm.WebApi.retrieveRecord(bpfEntityLogicalName, instanceId, "?$expand=processid($select=workflowid)").then(function (bpfRecord) {
+                const actualProcessId = bpfRecord.processid.workflowid;
+
+                Xrm.WebApi.retrieveMultipleRecords("processstage", `?$filter=processid/workflowid eq ${actualProcessId}`).then(function (stageResults) {
+                    let matchedStage = null;
+                    for (let i = 0; i < stageResults.entities.length; i++) {
+                        const stage = stageResults.entities[i];
+                        if (stage.stagename.trim().toLowerCase() === targetStageName.toLowerCase()) {
+                            matchedStage = stage;
+                            break;
+                        }
+                    }
+
+                    if (!matchedStage) return;
+
+                    const updateData = {
+                        "activestageid@odata.bind": `/processstages(${matchedStage.processstageid})`
+                    };
+
+                    Xrm.WebApi.updateRecord(bpfEntityLogicalName, instanceId, updateData).then(function () {
+                        console.log("✅ Stage updated via Web API.");
+                    }, function (err) {
+                        console.error("❌ Web API stage update failed:", err.message);
+                    });
+                });
+            });
+        });
+    } catch (err) {
+        console.error("❌ forceChangeViaWebAPI failed:", err.message);
     }
 }
 

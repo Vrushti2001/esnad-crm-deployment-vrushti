@@ -1,0 +1,281 @@
+<html><head>
+    <title>Assign Owner (Users &amp; Teams)</title>
+    <meta charset="UTF-8">
+    <script src="ClientGlobalContext.js.aspx" type="text/javascript"></script>
+    <style>
+        :root {
+            --accent: #C7BBA6;
+            --border: #d0d5dd;
+            --muted: #5b6472;
+            --bg: #ffffff;
+            --hover: #C7BBA6;
+            --stripe: #fafafa;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0; padding: 12px; background: var(--bg);
+            color: #111827; line-height: 1.35; font-size: 15px;
+        }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+        .tab-btn {
+            padding: 10px 14px; border-radius: 12px; cursor: pointer;
+            border: 1px solid var(--border); background: #fff;
+        }
+        .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+        .pane { display: none; }
+        .pane.active { display: block; }
+
+        /* Search row */
+        .search-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-bottom: 10px; }
+        .text-input { padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; font-size: 15px; }
+        .small-icon-btn { width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 12px; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+        .small-icon-btn:hover { background: var(--hover); }
+
+        /* Lists */
+        .list { border: 1px solid var(--border); border-radius: 12px; background: #fff; overflow: auto; max-height: 60vh; }
+        .user-item { padding: 10px 12px; border-bottom: 1px solid #eef0f3; cursor: pointer; display: block; background: linear-gradient(180deg, transparent 50%, var(--stripe) 50%) repeat-y; background-size: 100% 48px; }
+        .user-item:last-child { border-bottom: none; }
+        .user-item:hover { background-color: var(--hover); }
+        .user-name { font-weight: 700; font-size: 15px; color: #111; }
+        .team-name { font-size: 13px; color: #3b3f46; margin-top: 3px; }
+        .badge { display: inline-block; padding: 2px 8px; border: 1px solid #e5e7eb; border-radius: 9999px; font-size: 12px; margin-right: 8px; background: #fff; }
+
+        .btn { padding: 11px 16px; border-radius: 12px; cursor: pointer; border: 1px solid var(--border); background: #fff; font-size: 15px; }
+        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        #loading { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+        .hint { padding: 12px; color: var(--muted); }
+    </style>
+<meta></head>
+<body data-new-gr-c-s-check-loaded="14.1265.0" data-gr-ext-installed="" data-new-gr-c-s-loaded="14.1265.0" style="overflow-wrap: break-word;">
+
+    <div class="tabs" style="font-family: undefined;">
+        <button id="tabUsers" class="tab-btn active">Users (My Team Members)</button>
+        <button id="tabTeams" class="tab-btn">Teams </button>
+    </div>
+
+    <!-- Users Pane (existing behaviour) -->
+    <div id="paneUsers" class="pane active" style="font-family: undefined;">
+        <div class="search-row">
+            <input id="userSearch" class="text-input" type="text" placeholder="Filter by user or team…">
+            <button id="clearSearch" class="small-icon-btn" title="Clear">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M18.3 5.71 12 12.01l-6.29-6.3-1.42 1.42 6.3 6.29-6.3 6.29 1.42 1.42 6.29-6.3 6.29 6.3 1.42-1.42-6.3-6.29 6.3-6.29z"></path></svg>
+            </button>
+        </div>
+        <div id="usersList" class="list" aria-label="Users list"></div>
+    </div>
+
+    <!-- Teams Pane (new) -->
+    <div id="paneTeams" class="pane" style="font-family: undefined;">
+        <div class="search-row">
+            <input id="teamSearch" class="text-input" type="text" placeholder="Filter teams…">
+            <button id="clearTeamSearch" class="small-icon-btn" title="Clear">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M18.3 5.71 12 12.01l-6.29-6.3-1.42 1.42 6.3 6.29-6.3 6.29 1.42 1.42 6.29-6.3 6.29 6.3 1.42-1.42-6.3-6.29 6.3-6.29z"></path></svg>
+            </button>
+        </div>
+        <div id="teamsList" class="list" aria-label="Teams list"></div>
+        <div id="loading" role="status"></div>
+    </div>
+
+    <script>
+        // ---------- Utilities ----------
+        function getXrm() {
+            try { return Xrm || parent.Xrm; } catch { return parent.Xrm; }
+        }
+
+        function setOwnerOnParent(ownerId, ownerName, entityType) {
+            const x = getXrm();
+            const form = x && x.Page ? x.Page : null;
+            if (!form || !form.getAttribute) return;
+            const attr = form.getAttribute("ownerid");
+            if (!attr) return;
+            const withBraces = ownerId && ownerId.startsWith("{") ? ownerId : `{${ownerId}}`;
+            attr.setValue([{ id: withBraces, name: ownerName, entityType }]);
+        }
+
+        // ---------- DOM refs ----------
+        const tabUsers = document.getElementById('tabUsers');
+        const tabTeams = document.getElementById('tabTeams');
+        const paneUsers = document.getElementById('paneUsers');
+        const paneTeams = document.getElementById('paneTeams');
+
+        const usersList = document.getElementById('usersList');
+        const userSearch = document.getElementById('userSearch');
+        const clearSearch = document.getElementById('clearSearch');
+
+        const teamsList = document.getElementById('teamsList');
+        const teamSearch = document.getElementById('teamSearch');
+        const clearTeamSearch = document.getElementById('clearTeamSearch');
+
+        const loadingDiv = document.getElementById('loading');
+
+        // ---------- State ----------
+        let cachedUserEntries = []; // [{ id, name, teamName }]
+        let cachedTeamEntries = []; // [{ id, name, arabicName }]
+        let teamsLoaded = false;
+
+        // ---------- Tabs ----------
+        function showPane(pane) {
+            paneUsers.classList.remove('active');
+            paneTeams.classList.remove('active');
+            tabUsers.classList.remove('active');
+            tabTeams.classList.remove('active');
+            if (pane === 'users') { paneUsers.classList.add('active'); tabUsers.classList.add('active'); }
+            else { paneTeams.classList.add('active'); tabTeams.classList.add('active'); }
+        }
+
+        tabUsers.addEventListener('click', () => { showPane('users'); });
+        tabTeams.addEventListener('click', () => { showPane('teams'); if (!teamsLoaded) loadTeamsStartsWithKI(); });
+
+        // ---------- Users (existing) ----------
+        async function loadUsersFromMyTeams() {
+            const x = getXrm();
+            usersList.innerHTML = "";
+            loadingDiv.textContent = "Loading team members…";
+            let me = null;
+            try {
+                me = x.Utility.getGlobalContext().userSettings.userId.replace(/[{}]/g, "");
+            } catch (e) {
+                console.error('Unable to get user id from context', e);
+            }
+
+            try {
+                const myTeams = await x.WebApi.retrieveMultipleRecords("teammembership", `?$select=teamid&$filter=systemuserid eq ${me}`);
+                if (!myTeams.entities?.length) { loadingDiv.textContent = "You're not a member of any team."; return; }
+                const teamIds = [...new Set(myTeams.entities.map(t => t.teamid))];
+
+                const pairs = [];
+                for (const teamId of teamIds) {
+                    const team = await x.WebApi.retrieveRecord("team", teamId, "?$select=name,isdefault");
+                    if (team.isdefault === true) continue; // skip default teams
+                    const teamName = team.name;
+                    const members = await x.WebApi.retrieveMultipleRecords("teammembership", `?$select=systemuserid&$filter=teamid eq ${teamId}`);
+                    members.entities.forEach(m => pairs.push({ systemuserid: m.systemuserid, teamName }));
+                }
+
+                if (!pairs.length) { loadingDiv.textContent = "No users found in your teams (excluding default teams)."; return; }
+
+                const distinctIds = [...new Set(pairs.map(p => p.systemuserid))];
+                const filter = distinctIds.map(id => `systemuserid eq ${id}`).join(' or ');
+                const usersResp = await x.WebApi.retrieveMultipleRecords("systemuser", `?$select=systemuserid,fullname,isdisabled&$filter=(${filter}) and isdisabled eq false`);
+                const nameById = {};
+                usersResp.entities.forEach(u => nameById[u.systemuserid] = u.fullname);
+
+                cachedUserEntries = pairs
+                    .map(p => ({ id: p.systemuserid, name: nameById[p.systemuserid], teamName: p.teamName }))
+                    .filter(e => !!e.name)
+                    .sort((a, b) => (a.name + a.teamName).localeCompare(b.name + b.teamName));
+
+                renderUserEntries("");
+                loadingDiv.textContent = "";
+            } catch (err) {
+                console.error("Error loading team users:", err);
+                loadingDiv.textContent = "Error loading team users.";
+            }
+        }
+
+        function renderUserEntries(q) {
+            const query = (q || "").toLowerCase();
+            usersList.innerHTML = "";
+            const filtered = cachedUserEntries.filter(e => (e.name && e.name.toLowerCase().includes(query)) || (e.teamName && e.teamName.toLowerCase().includes(query)));
+            if (!filtered.length) { usersList.innerHTML = '<div class="hint">No matches.</div>'; return; }
+            filtered.forEach(e => {
+                const item = document.createElement("div");
+                item.className = "user-item";
+                item.innerHTML = `\n                    <div class="user-name">${e.name}</div>\n                    <div class="team-name"><span class="badge">Team</span>${e.teamName}</div>\n                `;
+                item.addEventListener("click", () => { setOwnerOnParent(e.id.replace(/[{}]/g, ""), e.name, "systemuser"); });
+                usersList.appendChild(item);
+            });
+        }
+
+        userSearch.addEventListener("input", (ev) => renderUserEntries(ev.target.value));
+        clearSearch.addEventListener("click", () => { userSearch.value = ""; renderUserEntries(""); userSearch.focus(); });
+
+        // ---------- Teams (new) ----------
+        // Fetch teams whose name starts with "KI" and display (show Arabic name if available)
+        async function loadTeamsStartsWithKI() {
+			const x = getXrm();
+			teamsList.innerHTML = "";
+			loadingDiv.textContent = "Loading teams starting with 'KI'…";
+
+			try {
+				// Try using custom English field first (if it exists in your org)
+				const selectCols = "$select=teamid,new_name_en,new_name_ar,name";
+				const filterEn = "$filter=startswith(new_name_en,'KI') eq true";
+				let resp = await x.WebApi.retrieveMultipleRecords("team", `?${selectCols}&${filterEn}`);
+
+				// If custom field new_name_en is not present in response properties, retry using standard name
+				const hasCustomEn = resp.entities && resp.entities.length && resp.entities[0].hasOwnProperty("new_name_en");
+				if ((!resp.entities || !resp.entities.length) || !hasCustomEn) {
+					// Retry using standard 'name' column as a fallback
+					const resp2 = await x.WebApi.retrieveMultipleRecords("team", `?$select=teamid,name&$filter=startswith(name,'KI') eq true`);
+					resp = resp2;
+				}
+
+				if (!resp.entities?.length) {
+					teamsList.innerHTML = '<div class="hint">No teams found starting with "KI".</div>';
+					loadingDiv.textContent = "";
+					teamsLoaded = true;
+					return;
+				}
+
+				// Map using the property names that actually exist: prefer new_name_ar, then new_name_en, then name
+				cachedTeamEntries = resp.entities.map(t => {
+					return {
+						id: t.teamid,
+						// prefer Arabic custom, then English custom, then standard name
+						displayName: (t.new_name_ar || t.new_name_en || t.name || "").toString(),
+						name: t.name || t.new_name_en || "" // keep original 'name' for identification if available
+					};
+				});
+
+				// sort by displayName
+				cachedTeamEntries.sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+
+				// render
+				renderTeamEntries("");
+				loadingDiv.textContent = "";
+				teamsLoaded = true;
+			} catch (err) {
+				console.error("Error loading teams:", err);
+				loadingDiv.textContent = "Error loading teams.";
+			}
+		}
+
+
+        function renderTeamEntries(q) {
+			const query = (q || "").toLowerCase();
+			teamsList.innerHTML = "";
+			const filtered = cachedTeamEntries.filter(t => (t.displayName || "").toLowerCase().includes(query));
+			if (!filtered.length) { teamsList.innerHTML = '<div class="hint">No matches.</div>'; return; }
+			filtered.forEach(t => {
+				const item = document.createElement('div');
+				item.className = 'user-item';
+				item.innerHTML = `
+					<div class="user-name">${t.displayName}</div>
+					<div class="team-name"><span class="badge">Team</span>${t.name || ''}</div>
+				`;
+				item.addEventListener('click', () => { setOwnerOnParent(t.id.replace(/[{}]/g, ''), t.name || t.displayName, 'team'); });
+				teamsList.appendChild(item);
+			});
+		}
+
+
+        teamSearch.addEventListener('input', (ev) => renderTeamEntries(ev.target.value));
+        clearTeamSearch.addEventListener('click', () => { teamSearch.value = ''; renderTeamEntries(''); teamSearch.focus(); });
+
+        // ---------- Init ----------
+        window.addEventListener('load', async () => {
+            await loadUsersFromMyTeams();
+            // teams load only when tab clicked (lazy)
+        });
+    </script>
+
+
+</body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>

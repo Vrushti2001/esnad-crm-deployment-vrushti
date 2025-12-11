@@ -290,6 +290,7 @@ namespace InvestorSupport
                $"تم إنشاء تذكرة جديدة برقم {RLM}{ticket}{PDF} لشركة {RLM}{customerRef?.Name}{PDF}.\r\n" +
                "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
                "نسعد بخدمتكم،\r\n" +
+                "مدير العلاقة:\r\n" +
                $"{RLM}{rmName}{PDF}\r\n" +
                $"{RLM}{rmPhone}{PDF}\r\n" +
                $"{RLM}{rmEmail}{PDF}";
@@ -305,6 +306,7 @@ namespace InvestorSupport
                "يرجى التكرم بالرد على البريد الإلكتروني المرسل خلال خمسة أيام عمل، حيث سيتم إغلاق التذكرة تلقائيًا في حال عدم الاستجابة.\r\n" +
                "نسعد بخدمتكم،\r\n" +
                "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+                "مدير العلاقة:\r\n" +
                $"{RLM}{rmName}{PDF}\r\n" +
                $"{RLM}{rmPhone}{PDF}\r\n" +
                $"{RLM}{rmEmail}{PDF}";
@@ -318,6 +320,7 @@ namespace InvestorSupport
                $"نود إشعاركم بأنه تمت معالجة التذكرة رقم {RLM}{ticket}{PDF}.\r\n" +
                "نأمل منكم التحقق من الحل المقدم، وفي حال استمرار المشكلة يرجى إفادتنا بذلك.\r\n" +
                "مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+                "مدير العلاقة:\r\n" +
                $"{RLM}{rmName}{PDF}\r\n" +
                $"{RLM}{rmPhone}{PDF}\r\n" +
                $"{RLM}{rmEmail}{PDF}";

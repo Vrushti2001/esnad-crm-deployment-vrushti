@@ -423,3 +423,6 @@ FodyWeavers.xsd
 *.msp
 /Plugins/CustomerService_Esnad/CustomerService_Esnad/SmsOnCaseMilestones1.cs
 /Plugins/CustomerService_Esnad/InvestorSupport/Investorkey.snk
+/Plugins/CustomerService_Esnad/CustomerService_Esnad/ApprovalAndFowardinglevel2.cs
+/Plugins/CustomerService_Esnad/CustomerService_Esnad/ApprovalAndFowardinglevel3.cs
+/Plugins/CustomerService_Esnad/CustomerService_Esnad/Processing-Level2.cs

@@ -1,0 +1,181 @@
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Timeline</title>
+<style>
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #f3f4f6;
+  margin: 0;
+  height: 100vh;
+}
+
+.timeline-container {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-header {
+  background: #fafafa;
+  padding: 16px 20px;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid #ddd;
+}
+
+.timeline-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.timeline-list {
+  position: relative;
+  padding-left: 75px;
+  padding-bottom: 30px;
+}
+
+.timeline-list::before {
+  content: "";
+  position: absolute;
+  left: 27px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #d0d0d0;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.icon {
+  width: 44px;
+  height: 44px;
+  background: #0078d7;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 15px;
+  margin-left: -70px;
+  margin-right: 20px;
+  z-index: 1;
+}
+
+.icon.note { background: #c44; }
+.icon.email { background: #4caf50; }
+.icon.post { background: #0078d7; }
+
+.item-content {
+  flex: 1;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.item-header {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.item-time {
+  font-size: 11px;
+  color: #888;
+  margin-left: 5px;
+}
+
+.item-subject {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.comment-box {
+  padding: 14px 20px;
+  background: #f8f9fa;
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid #ddd;
+}
+
+.comment-box textarea {
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px;
+  resize: none;
+  font-size: 14px;
+}
+
+.comment-box button {
+  background: #0078d7;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+</style>
+<meta></head>
+<body data-new-gr-c-s-check-loaded="14.1265.0" data-gr-ext-installed="" data-new-gr-c-s-loaded="14.1265.0" style="overflow-wrap: break-word;">
+<div class="timeline-container" id="timelinePanel">
+  <div class="timeline-header">Case Activity Timeline</div>
+  <div class="timeline-body">
+    <div class="timeline-list" id="timelineBody">
+      <!-- Example Items -->
+      <div class="timeline-item">
+        <div class="icon post">A</div>
+        <div class="item-content">
+          <div class="item-header">Auto-post on Test <span class="item-time">- 11:25 AM</span></div>
+          <div class="item-subject">Status change: Processing - Department</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="icon note">CL</div>
+        <div class="item-content">
+          <div class="item-header">Note modified by admin <span class="item-time">- 10:09 AM</span></div>
+          <div class="item-subject">Ticket reopened by user</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="comment-box">
+    <textarea id="commentInput" placeholder="Write a comment..."></textarea>
+    <button onclick="addComment()">Send</button>
+  </div>
+</div>
+
+<script>
+function addComment() {
+  const text = document.getElementById("commentInput").value.trim();
+  if (text === "") return;
+
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const item = document.createElement("div");
+  item.className = "timeline-item";
+  item.innerHTML = `
+    <div class="icon">AG</div>
+    <div class="item-content">
+      <div class="item-header">Agent (You) <span class="item-time">- ${time}</span></div>
+      <div class="item-subject">${text}</div>
+    </div>
+  `;
+
+  document.getElementById("timelineBody").appendChild(item);
+  document.getElementById("commentInput").value = "";
+  document.querySelector(".timeline-body").scrollTop = document.querySelector(".timeline-body").scrollHeight;
+}
+</script>
+
+
+</body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>

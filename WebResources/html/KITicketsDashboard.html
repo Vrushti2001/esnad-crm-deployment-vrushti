@@ -231,7 +231,7 @@ button.clear-btn:hover {
 }
 
 </style>
-<meta><meta><meta><meta><meta><meta><meta><meta><meta><meta></head>
+<meta><meta><meta><meta><meta><meta><meta><meta><meta><meta><meta></head>
 <body data-new-gr-c-s-check-loaded="14.1265.0" data-gr-ext-installed="" data-new-gr-c-s-loaded="14.1265.0" style="overflow-wrap: break-word;">
 <div class="dashboard-card" style="font-family: undefined;">
   <div class="toolbar">
@@ -262,7 +262,7 @@ button.clear-btn:hover {
 
 </div>
 
-    <div class="table-container">
+    <div class="table-container" style="font-family: undefined;">
     <table id="incidentGrid" class="table-fixed">
       <colgroup>
         <col style="width:80px">   <!-- Ticket -->
@@ -682,8 +682,13 @@ const fetchXml = `
     <attribute name="new_businessunitid" />
 	<attribute name="new_openticketage" />   <!-- ✅ Added -->
 	<attribute name="new_class" />   <!-- ✅ Added -->
-	
+	<!-- ⭐ ADDED FILTER HERE -->
+    <filter type="and">
+      <condition attribute="new_formtype" operator="eq" value="1" />
+    </filter>
+
     <order attribute="createdon" descending="true" />
+	
 
     <!-- Department name -->
     <link-entity name="businessunit" from="businessunitid" to="new_businessunitid" alias="dept">

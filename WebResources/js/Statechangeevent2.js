@@ -1,4 +1,4 @@
-﻿window.onLoadStageChangeEvent = function (executionContext) {
+window.onLoadStageChangeEvent2 = function (executionContext) {
     const formCtx = executionContext.getFormContext();
     console.log("📌 onLoadStageChangeEvent triggered");
 
@@ -180,10 +180,9 @@ const incidentComment = {
 
 function assignCaseToCustomerService(formContext) {
     const caseId = formContext.data.entity.getId();
-console.log(caseId);
     const teamGuids = [
-        "fca3c311-074c-f011-a400-fbb6a348b744", // Production
-        "2c80efda-7c4b-f011-a3ff-af212fee8ea9"  // Development
+       "d5f16e18-b4bf-f011-a42c-f76dbbe58aa4", // Production
+        "2c80efda-7c4b-f011-a3ff-a2212fee8ea9"  // Development
     ];
 
     function tryAssign(index) {
@@ -196,7 +195,7 @@ console.log(caseId);
             formContext.data.refresh(false);
         }).catch(() => tryAssign(index + 1));
     }
-	console.log("assigned");
+
     tryAssign(0);
 }
 

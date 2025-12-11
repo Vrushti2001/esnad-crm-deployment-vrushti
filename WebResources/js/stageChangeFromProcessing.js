@@ -34,7 +34,7 @@
 
         console.log(🔎 Retrieving BPF record for case...);
 
-        Xrm.WebApi.retrieveMultipleRecords(bpfEntityName, ?$filter = _incidentid_value eq ${ caseId }).then(function (bpfResult) {
+        Xrm.WebApi.retrieveMultipleRecords(bpfEntityName, ?$filter=_incidentid_value eq ${caseId}).then(function (bpfResult) {
             if (!bpfResult.entities || bpfResult.entities.length === 0) {
                 console.error("❌ No BPF record found for this case.");
                 return;
@@ -60,66 +60,66 @@
             const proceedToStageUpdate = () => {
                 console.log(🔎 Fetching stage ID for '${targetStageName}'...);
 
-        Xrm.WebApi.retrieveMultipleRecords("processstage", ?$filter = stagename eq '${targetStageName}').then(function (stageResult) {
-            if (!stageResult.entities || stageResult.entities.length === 0) {
-                console.error(❌ Stage '${targetStageName}' not found.);
-                return;
-            }
+                Xrm.WebApi.retrieveMultipleRecords("processstage", ?$filter=stagename eq '${targetStageName}').then(function (stageResult) {
+                    if (!stageResult.entities || stageResult.entities.length === 0) {
+                        console.error(❌ Stage '${targetStageName}' not found.);
+                        return;
+                    }
 
-            const stageId = stageResult.entities[0]["processstageid"];
-            console.log("✅ Stage ID:", stageId);
+                    const stageId = stageResult.entities[0]["processstageid"];
+                    console.log("✅ Stage ID:", stageId);
 
-            const updatePayload = {
-                "activestageid@odata.bind": /processstages(${stageId})
+                    const updatePayload = {
+                        "activestageid@odata.bind": /processstages(${stageId})
+                    };
+
+                    console.log(🔄 Updating BPF to '${targetStageName}' stage...);
+
+                    Xrm.WebApi.updateRecord(bpfEntityName, bpfId, updatePayload).then(async function () {
+                        console.log(✅ BPF moved to '${targetStageName}' stage.);
+
+                        // ✅ Reset the option set field
+                        formContext.getAttribute("new_stagesofbpf").setValue(null);
+
+                        // ✅ Save again to prevent "Unsaved Changes" popup
+                        await formContext.data.save();
+
+                        // Proceed with stage hiding logic
+                        hideStages(formContext, selectedValue);
+
+                    }, function (error) {
+                        console.error("❌ Failed to update BPF stage:", error.message);
+                    });
+                }, function (error) {
+                    console.error("❌ Failed to fetch stage:", error.message);
+                });
             };
 
-            console.log(🔄 Updating BPF to '${targetStageName}' stage...);
+            if (bpfStatus === 1) {
+                console.log("♻️ BPF is inactive. Reactivating...");
 
-            Xrm.WebApi.updateRecord(bpfEntityName, bpfId, updatePayload).then(async function () {
-                console.log(✅ BPF moved to '${targetStageName}' stage.);
+                const reactivationPayload = {
+                    "statecode": 0,
+                    "statuscode": 1
+                };
 
-                // ✅ Reset the option set field
-                formContext.getAttribute("new_stagesofbpf").setValue(null);
+                Xrm.WebApi.updateRecord(bpfEntityName, bpfId, reactivationPayload).then(function () {
+                    console.log("✅ BPF reactivated.");
+                    proceedToStageUpdate();
+                }, function (error) {
+                    console.error("❌ Failed to reactivate BPF:", error.message);
+                });
+            } else {
+                proceedToStageUpdate();
+            }
 
-                // ✅ Save again to prevent "Unsaved Changes" popup
-                await formContext.data.save();
-
-                // Proceed with stage hiding logic
-                hideStages(formContext, selectedValue);
-
-            }, function (error) {
-                console.error("❌ Failed to update BPF stage:", error.message);
-            });
         }, function (error) {
-            console.error("❌ Failed to fetch stage:", error.message);
+            console.error("❌ Failed to retrieve BPF record:", error.message);
         });
-    };
-
-    if (bpfStatus === 1) {
-        console.log("♻️ BPF is inactive. Reactivating...");
-
-        const reactivationPayload = {
-            "statecode": 0,
-            "statuscode": 1
-        };
-
-        Xrm.WebApi.updateRecord(bpfEntityName, bpfId, reactivationPayload).then(function () {
-            console.log("✅ BPF reactivated.");
-            proceedToStageUpdate();
-        }, function (error) {
-            console.error("❌ Failed to reactivate BPF:", error.message);
-        });
-    } else {
-        proceedToStageUpdate();
-    }
-
-}, function (error) {
-    console.error("❌ Failed to retrieve BPF record:", error.message);
-});
 
     } catch (e) {
-    console.error("❌ Exception occurred:", e.message);
-}
+        console.error("❌ Exception occurred:", e.message);
+    }
 }
 
 // 🔒 Function to hide stages based on selection

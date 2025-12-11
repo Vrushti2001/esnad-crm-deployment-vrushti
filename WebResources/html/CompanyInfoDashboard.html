@@ -1,7 +1,5 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
+<html><head>
+  <meta charset="UTF-8">
   <title>Company Export (Tickets + Visits)</title>
 
   <!-- Export libs -->
@@ -42,8 +40,8 @@
     .rows-group { display:flex; align-items:center; gap:8px; }
     select { padding:8px 10px; font-size:14px; border:1px solid #ccc; border-radius:4px; background:#fff; }
   </style>
-</head>
-<body>
+<meta><meta></head>
+<body data-new-gr-c-s-check-loaded="14.1265.0" data-gr-ext-installed="" data-new-gr-c-s-loaded="14.1265.0" style="overflow-wrap: break-word;">
 <div class="dashboard-card">
   <div class="toolbar">
     <div class="left-title">Companies</div>
@@ -51,19 +49,13 @@
     <div class="rows-group">
       <label for="rowsPerPage"><b>Rows per page:</b></label>
       <select id="rowsPerPage" onchange="changeRowsPerPage()">
-        <option value="10">10</option>
-        <option value="20" selected>20</option>
+        <option value="10" selected="">10</option>
+        <option value="20">20</option>
         <option value="40">40</option>
         <option value="100">100</option>
       </select>
 
-      <div class="export-dropdown">
-        <button class="export-btn" id="exportToggle">⬇ Export ▼</button>
-        <div id="exportDropdown" class="export-dropdown-menu">
-          <button onclick="exportToExcel()">📊 Export to Excel</button>
-          <button onclick="exportToPDF()">📄 Export to PDF</button>
-        </div>
-      </div>
+       <button class="export-btn" id="exportBtn" onclick="exportToExcel()">⬇ Export</button>
     </div>
   </div>
 
@@ -369,16 +361,9 @@ function exportToPDF() {
 }
 
 /* ---------------------- Init ---------------------- */
-document.getElementById("exportToggle").addEventListener("click", function (e) {
-  e.stopPropagation();
-  document.getElementById("exportDropdown").classList.toggle("show");
-});
-document.addEventListener("click", function () {
-  var d = document.getElementById("exportDropdown");
-  if (d.classList.contains("show")) d.classList.remove("show");
-});
 
 window.onload = function(){ fetchAccounts(); };
 </script>
-</body>
-</html>
+
+
+<grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></body></html>

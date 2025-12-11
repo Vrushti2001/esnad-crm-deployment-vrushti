@@ -1,20 +1,44 @@
-﻿function ensureBootstrapLoaded() {
-    const parentHead = window.top.document.head;
-    if (!parentHead.querySelector("#bootstrap-css")) {
-        const link = window.top.document.createElement("link");
-        link.id = "bootstrap-css";
-        link.rel = "stylesheet";
-        link.href = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css";
-        parentHead.appendChild(link);
-    }
-}
+﻿function reactivateAndSetStage(primaryControl) {
+    console.log("✅ Modal trigger started");
+	//-----check for team member access =----------------
+	
+	const formContext = primaryControl;
 
-function reactivateAndSetStage(executionContext) {
-    console.log("✅ OnSave triggered");
+        // List of allowed team IDs
+        const allowedTeamIds = [
+            "953dd3b2-544b-f011-a3fe-d4de6fab9c57", // Dev D365Dev
+            "2c80efda-7c4b-f011-a3ff-af212fee8ea9", // Dev Customer service team
+            "230121da-a673-f011-a40d-c0b1f6211923", // Dev Service Agents Teams 
+            "2ab2932b-9f73-f011-a40d-c0b1f6211923", // Dev Service Agents Department
+            "0eb23b1a-a967-f011-a409-87895d8b1d04", // Prod-D365 team
+            "16e9dd1a-b267-f011-a409-87895d8b1d04", // Prod-Customer service team
+            "9a685a34-a967-f011-a409-87895d8b1d04"  // Prod-Service Agents Teams
+        ];
 
-    const formContext = executionContext.getFormContext?.() || executionContext; // ✅ Safe fallback
+        const userId = Xrm.Utility.getGlobalContext().userSettings.userId.replace("{", "").replace("}", "");
 
-    const caseId = formContext.data.entity.getId().replace(/[{}]/g, "");
+        // Fetch user's teams
+        Xrm.WebApi.retrieveMultipleRecords(
+            "teammembership",
+            `?$select=teamid&$filter=systemuserid eq ${userId}`
+        ).then(result => {
+
+            const userTeams = result.entities.map(t => t.teamid.toLowerCase());
+
+            // Check if user belongs to allowed teams
+            const isAllowed = allowedTeamIds.some(team => userTeams.includes(team.toLowerCase()));
+
+            if (!isAllowed) {
+                Xrm.Navigation.openAlertDialog({
+                    title: "Access Denied",
+                    text: "You are not allowed to perform this action."
+                });
+                return;
+            }
+
+
+//----------------check for team member access
+    const caseId = primaryControl.data.entity.getId().replace(/[{}]/g, "");
     const parentDoc = window.top.document;
 
     ensureBootstrapLoaded();
@@ -65,50 +89,134 @@ function reactivateAndSetStage(executionContext) {
             alert("Please enter a comment before submitting.");
             return;
         }
-
+	 const caseId = primaryControl.data.entity.getId().replace(/[{}]/g, "");
+	
         const note = {
-            "subject": "Ticket Reopen Comment",
-            "notetext": comment,
-            "objectid_incident@odata.bind": `/incidents(${caseId})`
+            "new_discription": comment,
+			"new_Ticket@odata.bind":`/incidents(${caseId})`
         };
+		
+         Xrm.WebApi.createRecord("new_incidentcomments", note).then(function (result) {
+        console.log("✅ Incident Comment created:", result.id);
+            console.log("✅ record created:", result.id);
 
-        Xrm.WebApi.createRecord("annotation", note).then(function (result) {
-            console.log("✅ Note created:", result.id);
-            alert("Comment submitted and saved to Notes.");
-            window.top.document.getElementById("ticketReopenModal").remove();
-            delete window.top.submitReopenModal;
+            // Step 2: Reactivate Case
+            Xrm.WebApi.updateRecord("incident", caseId, {
+                "statecode": 0,
+                "statuscode": 100000006
+            }).then(function () {
+                console.log("✅ Case reactivated.");
 
-            const process = formContext.data.process;
+                // Step 3: Set Reopened = "Yes" (string), and set reopen datetime
+                Xrm.WebApi.updateRecord("incident", caseId, {
+                    "new_isreopened": "Yes",
+                    "new_reopendatetime": new Date(new Date().getTime() + (3 * 60 * 60 * 1000)) // KSA = UTC+3
 
-            if (process) {
-                const currentStage = process.getActiveStage();
-                if (currentStage && currentStage.getId().toLowerCase() === "ef0a2c39-d6d9-4b29-a39b-53dc539f0982") {
-                    console.log("🔁 Moving from 'Ticket Closure' to next stage...");
-                    process.moveNext(function (result) {
-                        if (result === "success") {
-                            console.log("✅ Stage moved successfully.");
-                            Xrm.WebApi.updateRecord("incident", caseId, {
-                                "statecode": 0,
-                                "statuscode": 1
-                            }).then(function () {
-                                console.log("✅ Case status set to Active - In Progress.");
-                                formContext.data.refresh();
-                            }, function (error) {
-                                console.error("❌ Failed to update case status:", error.message);
-                            });
-                        } else {
-                            console.warn("⚠️ Stage move result:", result);
-                        }
-                    });
-                } else {
-                    console.warn("⚠️ Not at 'Ticket Closure' stage.");
-                }
-            } else {
-                console.error("❌ BPF process not found.");
-            }
+                }).then(function () {
+                    console.log("✅ 'new_isreopened' and 'new_reopendatetime' fields updated.");
+
+                    alert("Comment submitted and saved to Notes.");
+                    window.top.document.getElementById("ticketReopenModal").remove();
+                    delete window.top.submitReopenModal;
+
+                    // Step 4: Move to new BPF stage
+                    updateBPFStageAfterReopen(caseId, primaryControl);
+
+                }, function (error) {
+                    console.error("❌ Failed to update reopen fields:", error.message);
+                    alert("Comment saved, but failed to update reopen fields.");
+                });
+
+            }, function (error) {
+                console.error("❌ Failed to reactivate case:", error.message);
+                alert("Cannot update field because case reactivation failed.");
+            });
+
         }, function (error) {
-            console.error("❌ Failed to save note:", error.message);
-            alert("Error saving comment: " + error.message);
+            console.error("❌ Failed to create note:", error.message);
+            alert("Failed to save note: " + error.message);
         });
     };
+}
+
+function ensureBootstrapLoaded() {
+    const parentHead = window.top.document.head;
+    if (!parentHead.querySelector("#bootstrap-css")) {
+        const link = window.top.document.createElement("link");
+        link.id = "bootstrap-css";
+        link.rel = "stylesheet";
+        link.href = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css";
+        parentHead.appendChild(link);
+    }
+}
+
+function updateBPFStageAfterReopen(caseId, formContext) {
+    try {
+        if (!formContext || !formContext.data) {
+            console.error("❌ Form context is not available.");
+            return;
+        }
+
+        const bpfEntityName = "phonetocaseprocess";
+        const targetStageId = "92a6721b-d465-4d36-aef7-e8822d7a5a6a"; // Approval And Forwarding
+
+        console.log("🔎 Fetching BPF linked to case...");
+
+        Xrm.WebApi.retrieveMultipleRecords(bpfEntityName, `?$filter=_incidentid_value eq ${caseId}`).then(function (bpfResult) {
+            if (!bpfResult.entities || bpfResult.entities.length === 0) {
+                console.error("❌ No BPF instance found for this case.");
+                return;
+            }
+
+            const bpfRecord = bpfResult.entities[0];
+            const bpfStatus = bpfRecord["statecode"];
+            const bpfId = bpfRecord["businessprocessflowinstanceid"];
+            const processId = bpfRecord["_processid_value"];
+
+            if (!bpfId || !processId) {
+                console.error("❌ Missing BPF ID or Process ID.");
+                alert("❌ BPF or Process ID not found. Check console.");
+                return;
+            }
+
+            const updatePayload = {
+                "activestageid@odata.bind": `/processstages(${targetStageId})`,
+                "processid@odata.bind": `/workflows(${processId})`
+            };
+
+            const proceedToStageUpdate = () => {
+                console.log("🔄 Updating BPF stage to 'Approval And Forwarding'...");
+
+                Xrm.WebApi.updateRecord(bpfEntityName, bpfId, updatePayload).then(function () {
+                    console.log("✅ BPF stage updated.");
+                    formContext.data.refresh();
+                }, function (error) {
+                    console.error("❌ Failed to update BPF stage:", error.message);
+                    alert("Failed to update BPF stage.");
+                });
+            };
+
+            if (bpfStatus === 1) {
+                console.log("♻️ Reactivating BPF...");
+
+                Xrm.WebApi.updateRecord(bpfEntityName, bpfId, {
+                    "statecode": 0,
+                    "statuscode": 1
+                }).then(function () {
+                    console.log("✅ BPF reactivated.");
+                    proceedToStageUpdate();
+                }, function (error) {
+                    console.error("❌ Failed to reactivate BPF:", error.message);
+                });
+            } else {
+                proceedToStageUpdate();
+            }
+
+        }, function (error) {
+            console.error("❌ Failed to fetch BPF:", error.message);
+        });
+
+    } catch (e) {
+        console.error("❌ Exception:", e.message);
+    }
 }

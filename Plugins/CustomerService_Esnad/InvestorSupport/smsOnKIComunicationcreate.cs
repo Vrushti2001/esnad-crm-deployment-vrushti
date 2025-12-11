@@ -235,6 +235,7 @@ namespace InvestorSupport
                     $"{RLE}{RLM}{fullLink}{PDF}\r\n\r\n" +
                     $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
                     $"{RLE}{RLM}مركز دعم كبار المستثمرين – قطاع التعدين{PDF}\r\n" +
+                     $"مدير العلاقة:\r\n" +
                     $"{RLE}{RLM}{rmFullName} - {rmPhone} - {rmEmail}{PDF}";
 
             }

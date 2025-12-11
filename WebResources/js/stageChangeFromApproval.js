@@ -1,4 +1,5 @@
-﻿async function OnchangeApproval(executionContext) {
+﻿
+async function OnchangeApproval(executionContext) {
     const formContext = executionContext.getFormContext();
 
     // Save form first before processing stage change

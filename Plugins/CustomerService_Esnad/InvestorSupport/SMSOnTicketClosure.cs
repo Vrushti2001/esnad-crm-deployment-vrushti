@@ -257,6 +257,7 @@ namespace InvestorSupport
                 $"وحرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة: {baseUrl}/KITicket?ticketnumber={ticket}\r\n" + 
                 $"نسعد بخدمتكم،\r\n" +
                 $"مركز دعم كبار المستثمرين – قطاع التعدين\r\n" +
+                $"مدير العلاقة:\r\n" +
                 $"{rmName}\r\n" +
                 $"{rmPhone}\r\n" +
                 $"{rmEmail}{PDF}";
