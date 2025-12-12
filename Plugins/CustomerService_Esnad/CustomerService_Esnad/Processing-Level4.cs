@@ -112,36 +112,67 @@ namespace CustomerService_Esnad
             // You can include Department Managers / Sector Heads by uncommenting the fetches below
             // var departmentManagers = GetDepartmentManagerInTeam(service, teamId, tracing);
             // var sectorHeads = GetSectorHeadInTeam(service, teamId, tracing);
-            var ceo = GetCEO(service, tracing);
+            var ceos = GetCEOs(service, tracing);
 
             var toParties = new List<Entity>();
             var recipients = new List<string>();
+            var addedUserIds = new HashSet<Guid>();
 
             // Example: add Department Managers (uncomment if required)
             // foreach (var m in departmentManagers)
             // {
-            //     toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", m.Id) });
-            //     var name = m.GetAttributeValue<string>("fullname") ?? m.Id.ToString();
-            //     var email = m.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
-            //     recipients.Add(!string.IsNullOrWhiteSpace(email) ? $"{name} <{email}>" : name);
+            //     var userId = m.Id;
+            //     if (!addedUserIds.Contains(userId))
+            //     {
+            //         toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", userId) });
+            //         var name = m.GetAttributeValue<string>("fullname") ?? m.Id.ToString();
+            //         var email = m.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
+            //         if (!string.IsNullOrWhiteSpace(email)) recipients.Add($"{name} <{email}>");
+            //         addedUserIds.Add(userId);
+            //     }
             // }
 
             // Example: add Sector Heads (uncomment if required)
             // foreach (var s in sectorHeads)
             // {
-            //     toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", s.Id) });
-            //     var name = s.GetAttributeValue<string>("fullname") ?? s.Id.ToString();
-            //     var email = s.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
-            //     recipients.Add(!string.IsNullOrWhiteSpace(email) ? $"{name} <{email}>" : name);
+            //     var userId = s.Id;
+            //     if (!addedUserIds.Contains(userId))
+            //     {
+            //         toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", userId) });
+            //         var name = s.GetAttributeValue<string>("fullname") ?? s.Id.ToString();
+            //         var email = s.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
+            //         if (!string.IsNullOrWhiteSpace(email)) recipients.Add($"{name} <{email}>");
+            //         addedUserIds.Add(userId);
+            //     }
             // }
 
-            // Add CEO if found
-            if (ceo != null)
+            // Add all CEOs if found (only active users with email)
+            if (ceos != null && ceos.Count > 0)
             {
-                toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", ceo.Id) });
-                var name = ceo.GetAttributeValue<string>("fullname") ?? ceo.Id.ToString();
-                var email1 = ceo.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
-                recipients.Add(!string.IsNullOrWhiteSpace(email1) ? $"{name} <{email1}>" : name);
+                tracing.Trace($"Adding {ceos.Count} CEO(s) to recipients.");
+                foreach (var ceo in ceos)
+                {
+                    var userId = ceo.Id;
+                    if (addedUserIds.Contains(userId)) continue;
+
+                    var emailAddr = ceo.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
+                    var fullName = ceo.GetAttributeValue<string>("fullname") ?? userId.ToString();
+
+                    if (string.IsNullOrWhiteSpace(emailAddr))
+                    {
+                        tracing.Trace($"Skipping CEO {fullName} ({userId}) because email is empty.");
+                        continue;
+                    }
+
+                    // Add to activityparty
+                    toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", userId) });
+                    recipients.Add(!string.IsNullOrWhiteSpace(emailAddr) ? $"{fullName} <{emailAddr}>" : fullName);
+                    addedUserIds.Add(userId);
+                }
+            }
+            else
+            {
+                tracing.Trace("No CEOs found to add as recipients.");
             }
 
             // Build recipients string and store on incident (non-blocking)
@@ -310,14 +341,22 @@ namespace CustomerService_Esnad
             return result.Entities.ToList();
         }
 
-        private Entity GetCEO(IOrganizationService service, ITracingService tracing)
+        /// <summary>
+        /// Returns all systemuser records that have the CEO role, are active, have an email, and are normal users (accessmode=0).
+        /// </summary>
+        private List<Entity> GetCEOs(IOrganizationService service, ITracingService tracing)
         {
             var fetchXml = $@"
 <fetch>
   <entity name='systemuser'>
-    <attribute name='systemuserid'/>
-    <attribute name='internalemailaddress'/>
-    <attribute name='fullname'/>
+    <attribute name='systemuserid' />
+    <attribute name='internalemailaddress' />
+    <attribute name='fullname' />
+    <filter type='and'>
+      <condition attribute='internalemailaddress' operator='not-null' />
+      <condition attribute='accessmode' operator='eq' value='0' />
+     
+    </filter>
     <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
       <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
         <filter>
@@ -328,8 +367,8 @@ namespace CustomerService_Esnad
   </entity>
 </fetch>";
             var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
-            tracing.Trace($"GetCEO: fetched {result.Entities.Count} user(s).");
-            return result.Entities.FirstOrDefault();
+            tracing.Trace($"GetCEOs: fetched {result.Entities.Count} user(s) with role '{CEORoleName}'.");
+            return result.Entities.ToList();
         }
 
         private Entity GetCRMAdminUser(IOrganizationService service)

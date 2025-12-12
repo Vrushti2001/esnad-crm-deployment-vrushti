@@ -138,7 +138,7 @@
     <Compile Include="SendCaseReplyNotification.cs" />
     <Compile Include="SetRMDetailsOnIncident.cs" />
     <Compile Include="SmsOnCaseMilestones.cs" />
-    <Compile Include="smsOnCustomernotReply.cs" />
+    <Compile Include="smsOnReopenTicket.cs" />
     <Compile Include="smsOnKIComunicationcreate.cs" />
     <Compile Include="SMSOnTicketClosure.cs" />
     <Compile Include="TicketCreationRMNotification.cs" />

@@ -11,7 +11,7 @@ namespace InvestorSupport
         // Logical name of the incident text field where we'll store recipient info (change if needed)
         private const string RecipientFieldOnIncident = "new_notificationusersprocessingl4";
         // Role name that identifies CEO
-        private const string CeoRoleName = "Esnad: CEO";
+        private const string CeoRoleName = "KI: CEO";
         // Environment variable logical name to read Org URL (optional)
         private const string OrgUrlEnvName = "OrgURL";
 
@@ -63,32 +63,61 @@ namespace InvestorSupport
                 string orgUrl = GetOrgURLSafe(service, tracing);
                 string caseUrl = string.IsNullOrEmpty(orgUrl) ? "" : $"{orgUrl}{caseId}";
 
-                // Get the CEO
-                var ceo = GetCEO(service, tracing);
-                if (ceo == null)
+                // Get all CEOs (active, have email, accessmode=0)
+                var ceos = GetCEOs(service, tracing);
+                if (ceos == null || ceos.Count == 0)
                 {
-                    tracing.Trace("SLALevel4: CEO not found. Updating incident field and exiting without sending email.");
+                    tracing.Trace("SLALevel4: No CEO users found. Updating incident field and exiting without sending email.");
                     SafeUpdateIncidentRecipientField(service, caseId, "No CEO found", tracing);
                     return;
                 }
 
-                // Compose recipient display string
-                string ceoName = ceo.GetAttributeValue<string>("fullname") ?? ceo.Id.ToString();
-                string ceoEmail = ceo.GetAttributeValue<string>("internalemailaddress") ?? "";
-                string recipientDisplay = string.IsNullOrWhiteSpace(ceoEmail) ? ceoName : $"{ceoName} <{ceoEmail}>";
+                // Compose recipient display string for incident field and build 'to' list
+                var toParties = new List<Entity>();
+                var recipientDisplays = new List<string>();
+                var addedUserIds = new HashSet<Guid>();
 
-                tracing.Trace($"SLALevel4: CEO found: {recipientDisplay}");
-
-                // Store recipient info on incident (truncate to CRM text limits)
-                SafeUpdateIncidentRecipientField(service, caseId, recipientDisplay, tracing);
-
-                // Build 'to' activityparty list — only CEO
-                var toParties = new List<Entity>
+                foreach (var ceo in ceos)
                 {
-                    new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", ceo.Id) }
-                };
+                    try
+                    {
+                        var userId = ceo.Id;
+                        if (addedUserIds.Contains(userId)) continue;
 
-                // Build email entity
+                        var ceoName = ceo.GetAttributeValue<string>("fullname") ?? userId.ToString();
+                        var ceoEmail = ceo.GetAttributeValue<string>("internalemailaddress") ?? string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(ceoEmail))
+                        {
+                            tracing.Trace($"SLALevel4: Skipping CEO {ceoName} ({userId}) - email empty.");
+                            continue;
+                        }
+
+                        toParties.Add(new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", userId) });
+                        recipientDisplays.Add($"{ceoName} <{ceoEmail}>");
+                        addedUserIds.Add(userId);
+                    }
+                    catch (Exception exInner)
+                    {
+                        tracing.Trace("SLALevel4: Error processing CEO record: " + exInner.ToString());
+                        // continue with other CEOs
+                    }
+                }
+
+                if (toParties.Count == 0)
+                {
+                    tracing.Trace("SLALevel4: No CEO recipients with email available after filtering. Updating incident field and exiting.");
+                    SafeUpdateIncidentRecipientField(service, caseId, "No CEO with email found", tracing);
+                    return;
+                }
+
+                // Build recipient display string and store it on incident (truncate to CRM text limits)
+                string recipientsJoined = string.Join("; ", recipientDisplays);
+                const int maxLen = 3000;
+                if (recipientsJoined.Length > maxLen) recipientsJoined = recipientsJoined.Substring(0, maxLen);
+                SafeUpdateIncidentRecipientField(service, caseId, recipientsJoined, tracing);
+
+                // Build email entity (EMAIL BODY KEPT EXACTLY AS REQUESTED)
                 string subject = $"[Processing SLA Escalation Level 4] Case Breach Alert - {caseTitle}";
                 string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
@@ -136,7 +165,7 @@ namespace InvestorSupport
                 sendRequest["TrackingToken"] = "";
                 service.Execute(sendRequest);
 
-                tracing.Trace("SLALevel4: Email sent successfully to CEO.");
+                tracing.Trace("SLALevel4: Email sent successfully to CEOs.");
             }
             catch (Exception ex)
             {
@@ -190,41 +219,41 @@ namespace InvestorSupport
         }
 
         /// <summary>
-        /// Returns the first user that has the CEO role (by role name constant). Null if not found.
+        /// Returns all users that have the CEO role, are active, are normal users (accessmode=0), and have a non-empty email.
         /// </summary>
-        private Entity GetCEO(IOrganizationService service, ITracingService tracing)
+        private List<Entity> GetCEOs(IOrganizationService service, ITracingService tracing)
         {
-            // Fetch CEO by role name
-            string fetch = $@"
-<fetch top='1'>
+            var fetchXml = $@"
+<fetch>
   <entity name='systemuser'>
     <attribute name='systemuserid' />
     <attribute name='fullname' />
     <attribute name='internalemailaddress' />
-    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner' alias='sur'>
-      <link-entity name='role' from='roleid' to='roleid' link-type='inner' alias='r'>
+    <filter type='and'>
+      <condition attribute='internalemailaddress' operator='not-null' />
+      <condition attribute='accessmode' operator='eq' value='0' />
+      
+    </filter>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
         <filter>
-          <condition attribute='name' operator='eq' value='{SecurityEscape(CeoRoleName)}' />
+          <condition attribute='name' operator='eq' value='{System.Security.SecurityElement.Escape(CeoRoleName)}' />
         </filter>
       </link-entity>
     </link-entity>
   </entity>
 </fetch>";
+
             try
             {
-                var coll = service.RetrieveMultiple(new FetchExpression(fetch));
-                if (coll.Entities.Count > 0)
-                {
-                    tracing.Trace($"SLALevel4: GetCEO found {coll.Entities.Count} record(s).");
-                    return coll.Entities.First();
-                }
-                tracing.Trace("SLALevel4: GetCEO found 0 records.");
-                return null;
+                var coll = service.RetrieveMultiple(new FetchExpression(fetchXml));
+                tracing.Trace($"SLALevel4: GetCEOs fetched {coll.Entities.Count} record(s) for role '{CeoRoleName}'.");
+                return coll.Entities.ToList();
             }
             catch (Exception ex)
             {
-                tracing.Trace("SLALevel4: GetCEO fetch error: " + ex.ToString());
-                return null;
+                tracing.Trace("SLALevel4: GetCEOs fetch error: " + ex.ToString());
+                return new List<Entity>();
             }
         }
 

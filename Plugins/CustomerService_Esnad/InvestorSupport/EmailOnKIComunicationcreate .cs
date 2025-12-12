@@ -254,10 +254,13 @@ namespace InvestorSupport
             public static string ForForKICommunicationsCreateCreate(string ReferenceNumber, string investorName, string rmFullName, string rmEmail, string rmPhone, string fullLink)
             {
                 // Keeps directional marks intact; caller will wrap into HTML div dir='rtl'
+                // Anchor text: "Please give your valuable feedback"
+                var feedbackAnchor = $"<a href='{fullLink}' target='_blank' rel='noopener noreferrer'>Please give your valuable feedback</a>";
+
                 return
                     $"{RLE}{RLM}شريكنا المستثمر {investorName}،{PDF}\r\n" +
                     $"{RLE}{RLM}حرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة:{PDF}\r\n" +
-                    $"{RLE}{RLM}{fullLink}{PDF}\r\n\r\n" +
+                    $"{RLE}{RLM}{feedbackAnchor}{PDF}\r\n\r\n" +
                     $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
                     $"{RLE}{RLM}مركز دعم كبار المستثمرين – قطاع التعدين{PDF}\r\n" +
                     $"{RLE}{RLM}{rmFullName} - {rmPhone} - {rmEmail}{PDF}";

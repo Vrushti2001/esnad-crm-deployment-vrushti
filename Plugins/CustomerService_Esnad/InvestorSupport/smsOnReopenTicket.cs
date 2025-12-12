@@ -10,7 +10,7 @@ using static System.Net.WebRequestMethods;
 
 namespace InvestorSupport
 {
-    public class smsOnCustomernotReply : IPlugin
+    public class smsOnReopenTicket : IPlugin
     {
         // 🔹 SMS Gateway configuration
         private const string SmsBaseUrl = "https://api.oursms.com/api-a/msgs";
@@ -31,7 +31,7 @@ namespace InvestorSupport
             {
                 if (!context.InputParameters.Contains("CaseId") || !(context.InputParameters["CaseId"] is EntityReference caseRef))
                 {
-                    CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", "Target parameter missing or invalid.", null, null);
+                    CreateErrorLog(service, "Ticket Reopen", "Target parameter missing or invalid.", null, null);
                     return;
                 }
 
@@ -41,7 +41,7 @@ namespace InvestorSupport
                 var incident = service.Retrieve("incident", caseId, new ColumnSet("ticketnumber", "customerid", "new_formtype", "new_rmname", "new_rmphonenumber", "new_rmemail", "new_companeyname"));
                 if (incident == null)
                 {
-                    CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", "Incident not found with provided ID.", caseId, null);
+                    CreateErrorLog(service, "Ticket Reopen", "Incident not found with provided ID.", caseId, null);
                     return;
                 }
                 if (!incident.Contains("new_formtype") || ((OptionSetValue)incident["new_formtype"]).Value != 1)
@@ -60,13 +60,13 @@ namespace InvestorSupport
 
                 if (string.IsNullOrWhiteSpace(ticketNumber))
                 {
-                    CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", "Ticket number missing. Cannot send SMS.", caseId, customerRef);
+                    CreateErrorLog(service, "Ticket Reopen", "Ticket number missing. Cannot send SMS.", caseId, customerRef);
                     return;
                 }
 
                 if (customerRef == null)
                 {
-                    CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", "Customer reference missing on Incident.", caseId, null);
+                    CreateErrorLog(service, "Ticket Reopen", "Customer reference missing on Incident.", caseId, null);
                     return;
                 }
 
@@ -74,7 +74,7 @@ namespace InvestorSupport
                 string phone = ResolvePhone(customerRef, service);
                 if (string.IsNullOrWhiteSpace(phone))
                 {
-                    CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", "No valid phone number found for customer.", caseId, customerRef);
+                    CreateErrorLog(service, "   ", "No valid phone number found for customer.", caseId, customerRef);
                     return;
                 }
 
@@ -89,12 +89,12 @@ namespace InvestorSupport
                 bool sent = SendSms(service, tracing, phone, smsBody, caseId, customerRef);
 
                 // 🔹 Log SMS notification
-                CreateSmsNote(service, "Ticket Closure Due to Customer didn't reply", smsBody, caseId, customerRef, sent);
+                CreateSmsNote(service, "Ticket Reopen", smsBody, caseId, customerRef, sent);
             }
             catch (Exception ex)
             {
                 // Final catch: no exception thrown outside
-                CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", ex.Message, null, null);
+                CreateErrorLog(service, "Ticket Reopen", ex.Message, null, null);
             }
 
             tracing.Trace("=== SMSOnTicketClosure END ===");
@@ -187,14 +187,14 @@ namespace InvestorSupport
                         return true;
                     else
                     {
-                        CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", $"Failed response: {content}", incidentId, customerRef);
+                        CreateErrorLog(service, "Ticket Reopen", $"Failed response: {content}", incidentId, customerRef);
                         return false;
                     }
                 }
             }
             catch (Exception ex)
             {
-                CreateErrorLog(service, "Ticket Closure Due to Customer didn't reply", $"Exception: {ex.Message}", incidentId, customerRef);
+                CreateErrorLog(service, "Ticket Reopen", $"Exception: {ex.Message}", incidentId, customerRef);
                 return false;
             }
         }
@@ -252,12 +252,10 @@ namespace InvestorSupport
                 string rmEmail,
                 string companyName,
                 EntityReference customerRef) =>
-                 $"{RLE}{RLM}شريكنا المستثمر {companyName}،{PDF}\r\n\r\n" +
-                $"{RLE}{RLM}نظراً لعدم تلقي رد من جانبكم على طلب المعلومات الإضافية المتعلقة بالتذكرة رقم {ticketNumber}، تم إغلاق التذكرة تلقائياً.{PDF}\r\n\r\n" +
-                $"{RLE}{RLM}إذا كنتم لا تزالون بحاجة إلى المساعدة، يرجى الرد على هذه الرسالة وسيتم إعادة فتح التذكرة.{PDF}\r\n\r\n" +
-                $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
+                $"{RLE}{RLM}تم اعادة فتح التذكرة رقم {ticketNumber} لشركة {companyName}{PDF}\r\n\r\n" +
                 $"{RLE}{RLM}مركز دعم كبار المستثمرين – قطاع التعدين{PDF}\r\n" +
-                $"{RLE}{RLM}{rmName} - {rmPhone} - {rmEmail}{PDF}";
+                $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
+                $"{RLE}{RLM}{rmName} {rmPhone} {rmEmail}{PDF}";
         }
     }
 }
