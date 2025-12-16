@@ -12,7 +12,7 @@ namespace CustomerService_Esnad
         // Change this logical name if you want to store recipients in a different field
         private const string NotificationFieldLogicalName = "new_notificationusersprocessingl1"; // <-- adjust if needed
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
-        private const int SafeMaxLength = 3800;
+        private const int SafeMaxLength = 5000;
 
         public void Execute(IServiceProvider serviceProvider)
         {

@@ -62,7 +62,7 @@ namespace CustomerService_Esnad
                 {
                     Conditions =
                 {
-                    new ConditionExpression("new_companyname", ConditionOperator.Equal, accountId)
+                    new ConditionExpression("parentcustomerid", ConditionOperator.Equal, accountId)
                 }
                 }
             };
@@ -93,8 +93,8 @@ namespace CustomerService_Esnad
         private void AppendLicensesToContact(IOrganizationService service, Guid contactId, Guid caseId)
         {
             // Fetch the account associated with the contact (new_companyname)
-            Entity contact = service.Retrieve("contact", contactId, new ColumnSet("new_companyname"));
-            EntityReference accountReference = contact.GetAttributeValue<EntityReference>("new_companyname");
+            Entity contact = service.Retrieve("contact", contactId, new ColumnSet("parentcustomerid"));
+            EntityReference accountReference = contact.GetAttributeValue<EntityReference>("parentcustomerid");
             if (accountReference == null)
             {
                 throw new InvalidPluginExecutionException("This contact is not linked to an account.");
@@ -110,7 +110,7 @@ namespace CustomerService_Esnad
                 {
                     Conditions =
                 {
-                    new ConditionExpression("new_companyname", ConditionOperator.Equal, accountId)
+                    new ConditionExpression("parentcustomerid", ConditionOperator.Equal, accountId)
                 }
                 }
             };

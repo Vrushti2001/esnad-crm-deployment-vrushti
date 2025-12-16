@@ -255,7 +255,7 @@ namespace InvestorSupport
                 $"{RLE}{RLM}تم اعادة فتح التذكرة رقم {ticketNumber} لشركة {companyName}{PDF}\r\n\r\n" +
                 $"{RLE}{RLM}مركز دعم كبار المستثمرين – قطاع التعدين{PDF}\r\n" +
                 $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
-                $"{RLE}{RLM}{rmName} {rmPhone} {rmEmail}{PDF}";
+                $"{RLE}{RLM}{rmEmail} {rmPhone} {rmName}{PDF}"; 
         }
     }
 }

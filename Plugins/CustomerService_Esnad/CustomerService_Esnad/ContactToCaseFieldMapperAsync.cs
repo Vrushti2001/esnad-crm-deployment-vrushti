@@ -45,12 +45,12 @@ namespace CustomerService_Esnad
                 {
                     tracingService.Trace("Customer is a contact. Retrieving contact details...");
                     Entity contact = service.Retrieve("contact", customerRef.Id,
-                        new ColumnSet("fullname", "emailaddress1", "mobilephone", "new_nationalidnumber", "new_companyname"));
+                        new ColumnSet("fullname", "emailaddress1", "mobilephone", "new_nationalidnumber", "parentcustomerid"));
 
                     string companyName = string.Empty;
                     string crNumber = string.Empty;
 
-                    if (contact.Contains("new_companyname") && contact["new_companyname"] is EntityReference companyRef)
+                    if (contact.Contains("parentcustomerid") && contact["parentcustomerid"] is EntityReference companyRef)
                     {
                         tracingService.Trace("Contact has a company lookup. Retrieving account...");
 

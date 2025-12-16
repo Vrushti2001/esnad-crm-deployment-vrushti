@@ -263,7 +263,7 @@ namespace InvestorSupport
                     $"{RLE}{RLM}{feedbackAnchor}{PDF}\r\n\r\n" +
                     $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
                     $"{RLE}{RLM}مركز دعم كبار المستثمرين – قطاع التعدين{PDF}\r\n" +
-                    $"{RLE}{RLM}{rmFullName} - {rmPhone} - {rmEmail}{PDF}";
+                    $"{RLE}{RLM}{rmEmail} - {rmPhone} -{rmFullName}{PDF}";
             }
         }
     }

@@ -1,14 +1,8 @@
-﻿using Microsoft.Xrm.Sdk.Query;
-using Microsoft.Xrm.Sdk;
+﻿using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Xml.Linq;
-
 
 namespace InvestorSupport
 {
@@ -23,221 +17,214 @@ namespace InvestorSupport
         {
             var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
             var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
-            var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-            var service = serviceFactory.CreateOrganizationService(context.UserId);
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var service = factory.CreateOrganizationService(context.UserId);
 
-            tracing.Trace("SendVisitorSMSOnCreate plugin started.");
+            tracing.Trace("🚀 SMS KI Communication Plugin START");
 
             try
             {
-                if (context.MessageName.ToLower() != "create" || !context.InputParameters.Contains("Target"))
+                if (context.MessageName != "Create" ||
+                    !context.InputParameters.Contains("Target") ||
+                    !(context.InputParameters["Target"] is Entity target))
                     return;
 
-                var KICommunications = (Entity)context.InputParameters["Target"];
-                if (KICommunications.LogicalName != "new_keyinvestorscommunication") return;
+                if (target.LogicalName != "new_keyinvestorscommunication")
+                    return;
 
-                string ReferenceNumber = KICommunications.GetAttributeValue<string>("new_referencenumber") ?? "";
-                EntityReference accountRef = KICommunications.GetAttributeValue<EntityReference>("new_Investor");
-                string investorName = "";
-                string rmFullName = "";
-                string rmEmail = "";
-                string rmPhone = "";
-                if (accountRef != null)
+                string referenceNo = target.GetAttributeValue<string>("new_referencenumber") ?? "N/A";
+                tracing.Trace("Reference No: " + referenceNo);
+
+                EntityReference accountRef =
+                    target.GetAttributeValue<EntityReference>("new_investor");
+
+                if (accountRef == null)
                 {
-                    // 2. Retrieve Account fields including Relationship Manager lookup
-                    var account = service.Retrieve(
-                        "account",
-                        accountRef.Id,
-                        new ColumnSet("name", "new_relationshipmanager")
+                    tracing.Trace("❌ Investor Account not found.");
+                    return;
+                }
+
+                // ================= ACCOUNT =================
+                Entity account = service.Retrieve(
+                    "account",
+                    accountRef.Id,
+                    new ColumnSet(
+                        "name",
+                        "telephone1",
+                        "telephone2",
+                        "telephone3",
+                        "new_companyrepresentativephonenumber",
+                        "new_relationshipmanager"
+                    )
+                );
+
+                string investorName = account.GetAttributeValue<string>("name") ?? "";
+                tracing.Trace("Investor: " + investorName);
+
+                // ================= PHONE =================
+                string phone = CleanPhone(
+                    FirstNonEmpty(
+                        account.GetAttributeValue<string>("new_companyrepresentativephonenumber"),
+                        account.GetAttributeValue<string>("telephone1"),
+                        account.GetAttributeValue<string>("telephone2"),
+                        account.GetAttributeValue<string>("telephone3")
+                    )
+                );
+
+                tracing.Trace("Resolved Phone: " + phone);
+
+                // ================= RM =================
+                string rmName = "", rmEmail = "", rmPhone = "";
+
+                if (account.Attributes.Contains("new_relationshipmanager"))
+                {
+                    var rmRef = account.GetAttributeValue<EntityReference>("new_relationshipmanager");
+                    tracing.Trace("RM Found: " + rmRef.Id);
+
+                    var rm = service.Retrieve(
+                        "systemuser",
+                        rmRef.Id,
+                        new ColumnSet("fullname", "internalemailaddress", "mobilephone")
                     );
 
-                     investorName = account.GetAttributeValue<string>("name");
+                    rmName = rm.GetAttributeValue<string>("fullname") ?? "";
+                    rmEmail = rm.GetAttributeValue<string>("internalemailaddress") ?? "";
+                    rmPhone = rm.GetAttributeValue<string>("mobilephone") ?? "";
 
-                    // 3. Get Relationship Manager Lookup (SystemUser)
-                    EntityReference rmRef = account.GetAttributeValue<EntityReference>("new_relationshipmanager");
-
-                    if (rmRef != null)
-                    {
-                        // 4. Retrieve System User details
-                        var rm = service.Retrieve(
-                            "systemuser",
-                            rmRef.Id,
-                            new ColumnSet("fullname", "internalemailaddress", "mobilephone")
-                        );
-
-                         rmFullName = rm.GetAttributeValue<string>("fullname");
-                         rmEmail = rm.GetAttributeValue<string>("internalemailaddress");
-                        rmPhone = rm.GetAttributeValue<string>("mobilephone");
-
-                        tracing.Trace($"Investor Name: {investorName}");
-                        tracing.Trace($"RM Name: {rmFullName}");
-                        tracing.Trace($"RM Email: {rmEmail}");
-                        tracing.Trace($"RM Mobile: {rmPhone}");
-                    }
-                }
-                
-                string phone = null;
-                
-                if (string.IsNullOrWhiteSpace(phone) && accountRef != null)
-                    phone = ResolvePhoneForAccount(service, accountRef, tracing);
-
-                string smsBody = SmsTemplates.ForForKICommunicationsCreateCreate(ReferenceNumber, investorName, rmFullName, rmEmail, rmPhone);
-                bool smsSent = false;
-                string apiResult = "";
-
-                if (!string.IsNullOrWhiteSpace(phone) && IsValidPhone(phone))
-                {
-                    apiResult = SendSms(phone, smsBody, tracing);
-                    smsSent = true;
+                    tracing.Trace($"RM → {rmName} | {rmEmail} | {rmPhone}");
                 }
                 else
                 {
-                    apiResult = "Invalid or missing phone number";
+                    tracing.Trace("⚠ Account has NO Relationship Manager.");
                 }
 
-                // ✅ Log SMS result in CRM
-                var note = new Entity("new_smsnotification");
-                note["new_name"] = "KEY INVESTORS COMMUNICATION Creation";
-                note["new_smsbody"] = smsBody;
-                note["new_issent"] = smsSent;
-                note["new_keyinvestorscommunication"] = KICommunications.ToEntityReference();
-                note["new_contact"] = accountRef;
-
-                service.Create(note);
-
-                tracing.Trace($"SMS process completed for visitor {ReferenceNumber}. Result: {apiResult}");
-            }
-            catch (Exception ex)
-            {
-                tracing.Trace("Error in plugin: " + ex.Message);
-                LogErrorToSmsNotification(serviceProvider, ex);
-                // remain silent — no exception thrown
-            }
-        }
-
-        private string ResolvePhoneForContact(IOrganizationService service, EntityReference contactRef, ITracingService tracing)
-        {
-            try
-            {
-                var c = service.Retrieve("contact", contactRef.Id, new ColumnSet("mobilephone", "telephone1", "telephone2"));
-                var raw = FirstNonEmpty(
-                    c.GetAttributeValue<string>("mobilephone"),
-                    c.GetAttributeValue<string>("telephone1"),
-                    c.GetAttributeValue<string>("telephone2")
+                // ================= SMS =================
+                string smsBody = SmsTemplate.Build(
+                    referenceNo,
+                    investorName,
+                    rmName,
+                    rmEmail,
+                    rmPhone
                 );
-                return CleanPhone(raw);
+
+                bool sent = false;
+                string result = "Not sent";
+
+                if (IsValidPhone(phone))
+                {
+                    result = SendSms(phone, smsBody, tracing);
+                    sent = true;
+                }
+                else
+                {
+                    tracing.Trace("❌ Invalid phone number. SMS skipped.");
+                }
+
+                // ================= LOG =================
+                Entity log = new Entity("new_smsnotification");
+                log["new_name"] = "KI Communication SMS";
+                log["new_smsbody"] = smsBody;
+                log["new_issent"] = sent;
+                log["new_keyinvestorscommunication"] = target.ToEntityReference();
+                log["new_contact"] = accountRef;
+
+                service.Create(log);
+
+                tracing.Trace("✅ SMS Plugin END. Result: " + result);
             }
             catch (Exception ex)
             {
-                tracing.Trace("Error resolving contact phone: " + ex.Message);
-                return null;
+                tracing.Trace("🔥 Plugin Error: " + ex.Message);
+                LogError(serviceProvider, ex);
             }
         }
 
-        private string ResolvePhoneForAccount(IOrganizationService service, EntityReference accountRef, ITracingService tracing)
-        {
-            try
-            {
-                var a = service.Retrieve("account", accountRef.Id, new ColumnSet("telephone1", "telephone2", "telephone3", "new_companyrepresentativephonenumber"));
-                var raw = FirstNonEmpty(
-                    a.GetAttributeValue<string>("new_companyrepresentativephonenumber"),
-                    a.GetAttributeValue<string>("telephone1"),
-                    a.GetAttributeValue<string>("telephone2"),
-                    a.GetAttributeValue<string>("telephone3")
-                );
-                return CleanPhone(raw);
-            }
-            catch (Exception ex)
-            {
-                tracing.Trace("Error resolving account phone: " + ex.Message);
-                return null;
-            }
-        }
+        // ================= HELPERS =================
 
-        private string FirstNonEmpty(params string[] vals)
+        private static string FirstNonEmpty(params string[] values)
         {
-            foreach (var v in vals)
+            foreach (var v in values)
                 if (!string.IsNullOrWhiteSpace(v))
                     return v;
             return null;
         }
 
-        private string CleanPhone(string raw)
+        private static string CleanPhone(string phone)
         {
-            return Regex.Replace(raw ?? string.Empty, @"[^\d+]", "");
+            return Regex.Replace(phone ?? "", @"[^\d+]", "");
         }
 
-        private bool IsValidPhone(string phone)
+        private static bool IsValidPhone(string phone)
         {
-            return !string.IsNullOrWhiteSpace(phone) && Regex.IsMatch(phone, @"^\+?\d{8,}$");
+            return !string.IsNullOrWhiteSpace(phone) &&
+                   Regex.IsMatch(phone, @"^\+?\d{8,}$");
         }
 
-        private string SendSms(string phone, string body, ITracingService tracing)
+        private static string SendSms(string phone, string body, ITracingService tracing)
         {
             try
             {
-                string enc(string s) => Uri.EscapeDataString(s ?? string.Empty);
-                var url = $"{SmsGatewayUrl}?username={enc(Username)}&token={enc(Token)}" +
-                          $"&dests={enc(phone)}&body={enc(body)}" +
-                          $"&priority=0&delay=0&validity=0&maxParts=0&dlr=0&prevDups=0" +
-                          $"&src={enc(Sender)}";
+                string enc(string s) => Uri.EscapeDataString(s ?? "");
+
+                var url =
+                    $"{SmsGatewayUrl}?username={enc(Username)}&token={enc(Token)}" +
+                    $"&dests={enc(phone)}&body={enc(body)}&src={enc(Sender)}";
 
                 using (var http = new HttpClient())
                 {
-                    var resp = http.GetAsync(url).GetAwaiter().GetResult();
-                    var content = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                    return $"{(int)resp.StatusCode} {content}";
+                    var res = http.GetAsync(url).GetAwaiter().GetResult();
+                    var txt = res.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    return $"{(int)res.StatusCode} {txt}";
                 }
             }
             catch (Exception ex)
             {
-                tracing.Trace("SMS sending error: " + ex.Message);
-                return "Error sending SMS: " + ex.Message;
+                tracing.Trace("SMS Error: " + ex.Message);
+                return ex.Message;
             }
         }
 
-        // 🧾 Log Errors into the SAME entity (new_smsnotification)
-        private void LogErrorToSmsNotification(IServiceProvider serviceProvider, Exception ex)
+        private static void LogError(IServiceProvider sp, Exception ex)
         {
             try
             {
-                var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
-                var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-                var service = serviceFactory.CreateOrganizationService(context.UserId);
+                var ctx = (IPluginExecutionContext)sp.GetService(typeof(IPluginExecutionContext));
+                var fac = (IOrganizationServiceFactory)sp.GetService(typeof(IOrganizationServiceFactory));
+                var svc = fac.CreateOrganizationService(ctx.UserId);
 
-                var note = new Entity("new_smsnotification");
-                note["new_name"] = "KEY INVESTORS COMMUNICATION SMS Error";
-                note["new_issent"] = false;
-                note["new_smsbody"] = ex.Message + (ex.InnerException != null ? " | Inner: " + ex.InnerException.Message : "");
+                Entity log = new Entity("new_smsnotification");
+                log["new_name"] = "KI SMS ERROR";
+                log["new_issent"] = false;
+                log["new_smsbody"] = ex.Message;
 
-                service.Create(note);
+                svc.Create(log);
             }
-            catch
-            {
-                // remain silent to avoid secondary failure
-            }
+            catch { }
         }
 
-        private static class SmsTemplates
-        {
-            private const string RLE = "\u202B"; // RTL Embedding
-            private const string PDF = "\u202C"; // Pop Directional Formatting
-            private const string RLM = "\u200F"; // RTL Mark
+        // ================= TEMPLATE =================
 
-            public static string ForForKICommunicationsCreateCreate(string ReferenceNumber, string investorName, string rmFullName, string rmEmail, string rmPhone)
+        private static class SmsTemplate
+        {
+            private const string RLE = "\u202B";
+            private const string PDF = "\u202C";
+            private const string RLM = "\u200F";
+
+            public static string Build(
+                string refNo,
+                string investor,
+                string rmName,
+                string rmEmail,
+                string rmPhone)
             {
-                string baseLink = "https://feedback-dev.crm-esnad.com/KICommunication";
-                string fullLink = $"{baseLink}?ref={Uri.EscapeDataString(ReferenceNumber ?? string.Empty)}";
+                string link = $"https://feedback-dev.crm-esnad.com/KICommunication?ref={Uri.EscapeDataString(refNo)}";
 
                 return
-                    $"{RLE}{RLM}شريكنا المستثمر {investorName}،{PDF}\r\n" +
-                    $"{RLE}{RLM}حرصاً منا لرفع مستوى جودة الخدمة يسعدنا تقييمكم للخدمة المقدمة:{PDF}\r\n" +
-                    $"{RLE}{RLM}{fullLink}{PDF}\r\n\r\n" +
-                    $"{RLE}{RLM}نسعد بخدمتكم،{PDF}\r\n" +
-                    $"{RLE}{RLM}مركز دعم كبار المستثمرين – قطاع التعدين{PDF}\r\n" +
-                     $"مدير العلاقة:\r\n" +
-                    $"{RLE}{RLM}{rmFullName} - {rmPhone} - {rmEmail}{PDF}";
-
+                    $"{RLE}{RLM}شريكنا المستثمر {investor}،{PDF}\r\n" +
+                    $"{RLE}{RLM}يسعدنا تقييمكم للخدمة المقدمة:{PDF}\r\n" +
+                    $"{RLE}{RLM}{link}{PDF}\r\n\r\n" +
+                    $"{RLE}{RLM}مدير العلاقة:{PDF}\r\n" +
+                    $"{RLE}{RLM}{rmName} {rmPhone} {rmEmail}{PDF}";
             }
         }
     }
