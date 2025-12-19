@@ -14,7 +14,7 @@ namespace CustomerService_Esnad
         private const string NotificationFieldLogicalName = "new_notificationusersverificationl1";
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
         private const int SafeMaxLength = 5000;
-        private const string StaticTeamName = "Customer Service Management Team";
+        private const string StaticTeamName = "Customer Experience Management Team";
 
         public void Execute(IServiceProvider serviceProvider)
         {

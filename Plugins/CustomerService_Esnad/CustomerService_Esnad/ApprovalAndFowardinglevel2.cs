@@ -12,7 +12,7 @@ namespace CustomerService_Esnad
         // Change if you want a different logical name on the incident
         private const string NotificationFieldLogicalName = "new_notificationusersassignmentl1";
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
-        private const string StaticTeamName = "Customer Service Management Team";
+        private const string StaticTeamName = "Customer Experience Management Team";
         private const int SafeMaxLength = 5000;
 
         public void Execute(IServiceProvider serviceProvider)

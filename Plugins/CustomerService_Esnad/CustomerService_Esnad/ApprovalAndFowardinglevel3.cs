@@ -11,7 +11,7 @@ namespace CustomerService_Esnad
     {
         // Change this logical name if you want to store recipients in a different field
         private const string NotificationFieldLogicalName = "new_notificationusersassignmentl2";
-        private const string StaticTeamName = "Customer Service Management Team";
+        private const string StaticTeamName = "Customer Experience Management Team";
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const int SafeMaxLength = 5000;
 
@@ -166,7 +166,7 @@ namespace CustomerService_Esnad
       <p>عنوان التذكرة:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>المسؤول عنها: Customer Service Management Team</p>
+      <p>المسؤول عنها: Customer Experience Management Team</p>
       <p>رقم التذكرة: {ticketNumber}</p>
       <p>يرجى اتخاذ الإجراءات اللازمة حسب آلية التصعيد المعتمدة لضمان سرعة المعالجة.</p>
       <p>شكرًا لتعاونكم،</p>
@@ -181,7 +181,7 @@ namespace CustomerService_Esnad
       <p>Ticket Title:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>Responsible Team: Customer Service Management Team</p>
+      <p>Responsible Team: Customer Experience Management Team</p>
       <p>Ticket Number: {ticketNumber}</p>
       <p>Please take the necessary actions according to the approved escalation procedure to ensure prompt handling.</p>
       <br/>

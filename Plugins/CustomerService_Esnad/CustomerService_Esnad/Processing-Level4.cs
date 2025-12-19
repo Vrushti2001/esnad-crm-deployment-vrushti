@@ -12,7 +12,7 @@ namespace CustomerService_Esnad
     {
         private const string NotificationFieldLogicalName = "new_notificationusersprocessingl3"; // change if required
         private const int SafeMaxLength = 5000;
-        private const string StaticTeamName = "Customer Service Management Team";
+        private const string StaticTeamName = "Customer Experience Management Team";
         private const string DeptManagerRoleName = "Esnad: Department Manager";
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const string CEORoleName = "Esnad: CEO";

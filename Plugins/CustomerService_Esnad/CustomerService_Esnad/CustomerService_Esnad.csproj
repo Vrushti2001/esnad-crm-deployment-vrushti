@@ -141,6 +141,7 @@
   <ItemGroup>
     <Compile Include="AppendLicenseNumbersPlugin.cs" />
     <Compile Include="ApprovalAndFowardinglevel2.cs" />
+    <Compile Include="SyncContactCompanyToIncidents .cs" />
     <Compile Include="ContactToCaseFieldMapperAsync.cs" />
     <Compile Include="ApprovalAndFowardinglevel1.cs" />
     <Compile Include="ApprovalAndFowardinglevel3.cs" />

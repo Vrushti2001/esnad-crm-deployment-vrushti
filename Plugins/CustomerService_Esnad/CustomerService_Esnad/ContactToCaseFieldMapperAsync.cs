@@ -40,6 +40,7 @@ namespace CustomerService_Esnad
                 }
 
                 Entity update = new Entity("incident", caseId);
+                EntityReference companyLookup = null;
 
                 if (customerRef.LogicalName == "contact")
                 {
@@ -53,7 +54,7 @@ namespace CustomerService_Esnad
                     if (contact.Contains("parentcustomerid") && contact["parentcustomerid"] is EntityReference companyRef)
                     {
                         tracingService.Trace("Contact has a company lookup. Retrieving account...");
-
+                        companyLookup = companyRef; // ✅ keep the lookup reference
                         // Retrieve both name and CR number from the account
                         Entity account = service.Retrieve("account", companyRef.Id, new ColumnSet("name", "new_crnumber"));
 
@@ -63,7 +64,7 @@ namespace CustomerService_Esnad
                         tracingService.Trace("Retrieved company name: " + companyName);
                         tracingService.Trace("Retrieved CR number: " + crNumber);
                     }
-
+                    update["new_company"] = companyLookup;
                     update["new_customername"] = contact.GetAttributeValue<string>("fullname") ?? string.Empty;
                     update["new_email"] = contact.GetAttributeValue<string>("emailaddress1") ?? string.Empty;
                     update["new_phonenumber"] = contact.GetAttributeValue<string>("mobilephone") ?? string.Empty;
@@ -76,7 +77,7 @@ namespace CustomerService_Esnad
                     tracingService.Trace("Customer is an account. Retrieving account details...");
                     Entity account = service.Retrieve("account", customerRef.Id,
                         new ColumnSet("name", "emailaddress1", "new_companyrepresentativephonenumber", "new_crnumber", "new_relationshipmanager"));
-
+                    update["new_company"] = customerRef;
                     update["new_email"] = account.GetAttributeValue<string>("emailaddress1") ?? string.Empty;
                     update["new_phonenumber"] = account.GetAttributeValue<string>("new_companyrepresentativephonenumber") ?? string.Empty;
                     update["new_companeyname"] = account.GetAttributeValue<string>("name") ?? string.Empty;
