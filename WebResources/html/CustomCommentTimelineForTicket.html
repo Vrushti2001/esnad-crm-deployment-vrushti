@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Incident Comments</title>
+
+<style>
+/* ============================
+   CRM PROFESSIONAL SUBGRID UI
+============================ */
+* {
+    box-sizing: border-box;
+    font-family: sans-serif;
+}
+
+body {
+    margin: 0;
+    background: #ffffff;
+    color: #323130;
+}
+
+/* Container */
+.crm-subgrid {
+    border: 2px solid rgb(199, 187, 166);
+    border-radius: 2px;
+}
+
+.subgrid-header {
+    border-bottom: 1px solid rgb(199, 187, 166);
+}
+
+
+/* Header */
+.subgrid-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 36px;
+    padding: 0 10px;
+    border-bottom: 1px solid #d6d6d6;
+}
+
+.subgrid-header strong {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.subgrid-header span {
+    font-size: 12px;
+    font-weight: 600;
+    color: #005a9e;
+    cursor: pointer;
+}
+#refreshBtn {
+    font-size: 14px;
+    font-weight: 600;
+    color: #005a9e;
+    cursor: pointer;
+}
+
+#refreshBtn:hover {
+    text-decoration: underline;
+}
+.edit-icon {
+    cursor: pointer;
+    font-size: 14px;
+    color: #005a9e;
+}
+
+.edit-icon:hover {
+    text-decoration: underline;
+}
+
+
+/* Table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* Header cells */
+thead th {
+	position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #ffffff;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #005a9e;
+    text-align: left;
+    border-bottom: 1px solid #d6d6d6;
+    white-space: nowrap;
+}
+
+/* Rows */
+tbody tr {
+    height: 36px;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f3f3f3;
+}
+
+tbody tr:hover {
+    background-color: #eaeaea;
+}
+
+/* Cells */
+tbody td {
+    height: 36px;
+    padding: 0 8px;
+    font-size: 13px;
+    border-bottom: 1px solid #ededed;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+/* Checkbox column */
+th:first-child,
+td:first-child {
+    width: 30px;
+    text-align: center;
+}
+
+/* Column widths */
+td:nth-child(2) { max-width: 420px; }
+td:nth-child(3) { max-width: 260px; }
+td:nth-child(4) { max-width: 220px; }
+td:nth-child(5) { max-width: 160px; }
+
+/* Attachments */
+.attachment-icons div {
+    display: inline-flex;
+    align-items: center;
+}
+
+.attachment-icons a {
+    color: #005a9e;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.attachment-icons a:hover {
+    text-decoration: underline;
+}
+/* ============================
+   ATTACHMENT POPOVER
+============================ */
+
+.attachment-cell {
+    position: relative;
+    white-space: nowrap;
+}
+
+.attachment-link {
+    color: #005a9e;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.attachment-link:hover {
+    text-decoration: underline;
+}
+
+.more-link {
+    margin-left: 6px;
+    color: #005a9e;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.more-link:hover {
+    text-decoration: underline;
+}
+
+/* Hidden popover */
+.attachment-popover {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 50;
+    background: #ffffff;
+    border: 1px solid #c8c6c4;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    padding: 6px 8px;
+    min-width: 260px;
+    max-width: 320px;
+}
+
+/* Attachment inside popover */
+.attachment-popover div {
+    margin-bottom: 4px;
+}
+
+.attachment-popover a {
+    color: #005a9e;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.attachment-popover a:hover {
+    text-decoration: underline;
+}
+
+/* Footer */
+.subgrid-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    border-top: 1px solid #d6d6d6;
+}
+
+/* Pagination */
+.pagination button {
+    border: none;
+    background: transparent;
+    color: #005a9e;
+    font-size: 12px;
+    padding: 0 6px;
+    cursor: pointer;
+}
+
+.pagination button.active {
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+button:focus,
+a:focus {
+    outline: none;
+}
+/* ============================
+   COMMENT HOVER (FULL TEXT)
+============================ */
+.comment-cell {
+    max-width: 420px;
+}
+
+.comment-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="crm-subgrid">
+    <div class="subgrid-header">
+    <strong>Ticket Comments</strong>
+
+    <div style="display:flex;align-items:center;gap:12px;">
+        <span id="addBtn">＋ Add Comment</span>
+		<span id="refreshBtn" title="Refresh">⟳</span>
+    </div>
+	</div>
+
+
+    <table>
+        <thead>
+            <tr>
+              <th style="width:30px;">✔</th>
+			  <th style="width:3200px;">Comment </th>
+			  <th style="width:250px;">Attachment</th>
+			  <th style="width:230px;">Created By</th>
+			  <th style="width:160px;">Created On</th>
+			  <th style="width:60px;">Action</th>
+            </tr>
+        </thead>
+        <tbody id="gridBody"></tbody>
+    </table>
+
+    <div class="subgrid-footer">
+        <span id="recordInfo">Loading…</span>
+        <div class="pagination" id="pagination"></div>
+    </div>
+</div>
+
+<script>
+/* =====================
+   GLOBALS
+===================== */
+const pageSize = 5;
+let currentPage = 1;
+let allRecords = [];
+
+/* =====================
+   KSA TIME (UTC +3)
+===================== */
+function toKSATime(utc) {
+    if (!utc) return "—";
+    const d = new Date(utc);
+    return new Date(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        d.getUTCHours() + 3,
+        d.getUTCMinutes(),
+        d.getUTCSeconds()
+    ).toLocaleString("en-US");
+}
+
+function getClientUrl() {
+    return parent.Xrm.Utility.getGlobalContext().getClientUrl();
+}
+
+/* =====================
+   ADD NEW COMMENT
+===================== */
+document.getElementById("addBtn").onclick = function () {
+    const id = parent.Xrm.Page.data.entity.getId();
+    if (!id) return alert("Please save the Incident first.");
+    parent.Xrm.Navigation.openForm(
+        { entityName: "new_incidentcomments"},
+        { new_ticket: id.replace(/[{}]/g, "") }
+    );
+};
+document.getElementById("refreshBtn").onclick = function () {
+    currentPage = 1;
+    allRecords = [];
+    document.getElementById("gridBody").innerHTML = "";
+    document.getElementById("recordInfo").innerText = "Loading…";
+    loadDataSafe();
+};
+function openEditForm(recordId) {
+    parent.Xrm.Navigation.openForm(
+        {
+            entityName: "new_incidentcomments",
+            entityId: recordId
+        }
+    );
+}
+function toggleAttachments(e, recordId) {
+    // 🔴 VERY IMPORTANT
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+
+    // Close all other popovers first (CRM-like)
+    document.querySelectorAll(".attachment-popover")
+        .forEach(p => p.style.display = "none");
+
+    const el = document.getElementById("att-" + recordId);
+    if (!el) return;
+
+    el.style.display =
+        el.style.display === "block" ? "none" : "block";
+}
+
+
+// Close popover when clicking outside
+document.addEventListener("click", function (e) {
+    if (!e.target.closest(".attachment-cell")) {
+        document.querySelectorAll(".attachment-popover")
+            .forEach(p => p.style.display = "none");
+    }
+});
+
+
+/* =====================
+   SAFE LOAD
+===================== */
+
+function loadDataSafe() {
+    if (!parent.Xrm || !parent.Xrm.Page)
+        return setTimeout(loadDataSafe, 1000);
+
+    const id = parent.Xrm.Page.data.entity.getId();
+    if (!id)
+        return setTimeout(loadDataSafe, 1500);
+
+    loadComments(id.replace(/[{}]/g, ""));
+}
+
+
+
+/* =====================
+   LOAD COMMENTS
+===================== */
+function loadComments(incidentId) {
+
+    const fetchXml = `
+    <fetch mapping="logical">
+      <entity name="new_incidentcomments">
+        <attribute name="new_incidentcommentsid"/>
+        <attribute name="new_discription"/>
+        <attribute name="createdon"/>
+        <attribute name="createdby"/>
+        <order attribute="createdon" descending="true"/>
+        <filter>
+          <condition attribute="new_ticket" operator="eq" value="${incidentId}"/>
+        </filter>
+        <link-entity name="systemuser"
+                     from="systemuserid"
+                     to="createdby"
+                     alias="cb">
+          <attribute name="fullname"/>
+        </link-entity>
+      </entity>
+    </fetch>`;
+
+    parent.Xrm.WebApi.retrieveMultipleRecords(
+        "new_incidentcomments",
+        "?fetchXml=" + encodeURIComponent(fetchXml)
+    ).then(res => {
+
+        allRecords = res.entities.map(c => ({
+            id: c.new_incidentcommentsid,
+            comment: c.new_discription || "",
+            createdBy: c["cb.fullname"] || "—",
+            createdOn: toKSATime(c.createdon),
+            attachments: []
+        }));
+
+        renderTable();
+        renderPagination();
+        loadAttachments();
+    });
+}
+
+/* =====================
+   LOAD ATTACHMENTS
+===================== */
+function loadAttachments() {
+    allRecords.forEach(rec => {
+        const q =
+          "?$select=annotationid,filename" +
+          "&$filter=_objectid_value eq " + rec.id +
+          " and isdocument eq true";
+
+        parent.Xrm.WebApi.retrieveMultipleRecords("annotation", q)
+            .then(notes => {
+                rec.attachments = notes.entities.map(n => ({
+                    name: n.filename,
+                    url:
+                      getClientUrl() +
+                      "/_controls/notes/notesattachment.aspx?attachmentid=" +
+                      encodeURIComponent(n.annotationid) +
+                      "&download=1"
+                }));
+                renderTable();
+            });
+    });
+}
+
+/* =====================
+   RENDER TABLE
+===================== */
+function renderTable() {
+
+    const tbody = document.getElementById("gridBody");
+    tbody.innerHTML = "";
+
+    if (allRecords.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='5'>No records found</td></tr>";
+        document.getElementById("recordInfo").innerText = "0 of 0";
+        return;
+    }
+
+    const start = (currentPage - 1) * pageSize;
+    const rows = allRecords.slice(start, start + pageSize);
+
+    rows.forEach(r => {
+
+       let attach = "No Attachment";
+        if (r.attachments.length > 0) {
+			const first = r.attachments[0];
+			const moreCount = r.attachments.length - 1;
+
+			attach = `
+			  <div class="attachment-cell">
+				<a href="javascript:void(0)"
+				   onclick="downloadFile('${first.url}','${first.name}')"
+				   class="attachment-link">
+				   📎 ${first.name}
+				</a>
+
+				${moreCount > 0 ? `
+				  <span class="more-link"
+					  onclick="toggleAttachments(event,'${r.id}')">
+				  +${moreCount} more
+				</span>
+
+				` : ""}
+
+				<div class="attachment-popover"
+					 id="att-${r.id}">
+				  ${r.attachments.map(a => `
+					<div>
+					  <a href="javascript:void(0)"
+						 onclick="downloadFile('${a.url}','${a.name}')">
+						 📎 ${a.name}
+					  </a>
+					</div>
+				  `).join("")}
+				</div>
+			  </div>
+			`;
+		}
+
+        tbody.innerHTML += `
+        <tr>
+            <td> </td>
+            <td class="comment-cell">
+				<span class="comment-text" title="${r.comment}">
+					${r.comment}
+				</span>
+			</td>
+            <td>${attach}</td>
+            <td>${r.createdBy}</td>
+            <td>${r.createdOn}</td>
+			 <td style="text-align:center;">
+				<span class="edit-icon"
+					title="Edit"
+					onclick="openEditForm('${r.id}')">
+					✏
+				</span>
+			</td>
+        </tr>`;
+    });
+
+    document.getElementById("recordInfo").innerText =
+        `${start + 1}-${Math.min(start + pageSize, allRecords.length)} of ${allRecords.length}`;
+}
+
+/* =====================
+   PAGINATION
+===================== */
+function renderPagination() {
+    const pag = document.getElementById("pagination");
+    pag.innerHTML = "";
+    const pages = Math.ceil(allRecords.length / pageSize);
+    for (let i = 1; i <= pages; i++) {
+        pag.innerHTML +=
+          `<button class="${i===currentPage?'active':''}"
+                   onclick="goToPage(${i})">${i}</button>`;
+    }
+}
+function goToPage(p) {
+    currentPage = p;
+    renderTable();
+    renderPagination();
+}
+
+/* =====================
+   DOWNLOAD
+===================== */
+async function downloadFile(url, name) {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+/* INIT */
+loadDataSafe();
+</script>
+
+</body>
+</html>

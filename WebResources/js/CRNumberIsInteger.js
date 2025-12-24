@@ -38,3 +38,51 @@ function validateIntegerField(executionContext) {
         formContext.getControl(fieldName).clearNotification();
     }
 }
+
+
+function preventSaveIfCRDuplicate(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var eventArgs = executionContext.getEventArgs();
+
+    var crAttr = formContext.getAttribute("new_crnumber");
+    if (!crAttr) return;
+
+    var crNumber = crAttr.getValue();
+    if (!crNumber) return;
+
+    var recordId = formContext.data.entity.getId();
+    if (recordId) {
+        recordId = recordId.replace("{", "").replace("}", "");
+    }
+
+    // Clear previous notification
+    formContext.ui.clearFormNotification("CR_DUPLICATE");
+
+    var query =
+        "?$select=accountid" +
+        "&$filter=new_crnumber eq '" + crNumber + "'" +
+        (recordId ? " and accountid ne " + recordId : "");
+
+    // ❗ STOP SAVE until validation completes
+    eventArgs.preventDefault();
+
+    Xrm.WebApi.retrieveMultipleRecords("account", query).then(
+        function success(result) {
+            if (result.entities.length > 0) {
+                // Duplicate found → BLOCK SAVE
+                formContext.ui.setFormNotification(
+                    "CR Number already exists. You cannot save this record.",
+                    "ERROR",
+                    "CR_DUPLICATE"
+                );
+            } else {
+                // No duplicate → allow save
+                formContext.ui.clearFormNotification("CR_DUPLICATE");
+                formContext.data.save();
+            }
+        },
+        function error(err) {
+            console.error("CR duplicate check failed:", err.message);
+        }
+    );
+}
