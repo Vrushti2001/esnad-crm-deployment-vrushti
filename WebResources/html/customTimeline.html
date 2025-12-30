@@ -1,0 +1,423 @@
+<html><head>
+<meta charset="utf-8">
+<title>Custom OOB Timeline</title>
+
+<style>
+body{
+    font-family:"Segoe UI",sans-serif;
+    background:#f3f2f1;
+    margin:0;
+    padding:10px;
+}
+
+/* ========= TOP BAR ========= */
+.topbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+}
+.title1 {
+    font-size: 18px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+.icon-btn{
+    border:none;
+    background:none;
+    font-size:18px;
+    cursor:pointer;
+}
+
+/* ========= DROPDOWN ========= */
+.dropdown{position:relative;display:inline-block}
+.dropdown-menu{
+    display:none;
+    position:absolute;
+    right:0;
+    top:26px;
+    background:#fff;
+    border:1px solid #c8c6c4;
+    border-radius:4px;
+    min-width:120px;
+    z-index:9999;
+}
+.dropdown-menu div{
+    padding:8px;
+    cursor:pointer;
+    font-size:13px;
+}
+.dropdown-menu div:hover{background:#f3f2f1}
+
+/* ========= FILTER ========= */
+.toolbar{margin-bottom:12px}
+.toolbar button{
+    background:rgb(165, 149, 122);
+    color:#fff;
+    border:none;
+    padding:5px 8px;
+    margin-right:4px;
+    border-radius:4px;
+    font-size:12px;
+    cursor:pointer;
+}
+
+/* ========= TIMELINE ========= */
+.timeline{position:relative;margin-left:24px}
+.timeline::before{
+    content:"";
+    position:absolute;
+    left:12px;
+    top:0;
+    bottom:0;
+    width:2px;
+    background:#edebe9;
+}
+.item{
+    position:relative;
+    padding-left:40px;
+    margin-bottom:22px;
+}
+.avatar{
+    position:absolute;
+    left:0;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    background:#a4262c;
+    color:#fff;
+    font-size:12px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.header{font-size:13px;color:#323130}
+.time{color:#605e5c}
+.body{margin-top:6px;font-size:13px;display:none}
+.body.always{display:block}
+
+/* ========= EMAIL ACTIONS ========= */
+.email-actions{font-size:12px;margin-top:4px}
+.email-actions a{
+    color:rgb(165, 149, 122);
+    margin-right:14px;
+    cursor:pointer;
+    text-decoration:none;
+}
+.email-actions a:hover{text-decoration:underline}
+
+/* ========= MODAL ========= */
+.modal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:99999;
+}
+.modal-content{
+    background:#fff;
+    width:460px;
+    padding:16px;
+    border-radius:6px;
+}
+.modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+textarea{width:100%;height:90px}
+</style>
+<meta><meta></head>
+
+<body data-new-gr-c-s-check-loaded="14.1267.0" data-gr-ext-installed="" data-new-gr-c-s-loaded="14.1267.0" style="overflow-wrap: break-word;">
+
+<!-- ========= TOP BAR ========= -->
+<div class="topbar">
+    <title1><b>Timeline</b></title1>
+    <button></button>
+    <div>
+        
+        <button onclick="toggleSort()"><span id="sortLabel">⮟</span></button>
+      
+        <div class="dropdown">
+            <button class="icon-btn" onclick="togglePlus(event)">✚</button>
+            <div id="plusMenu" class="dropdown-menu">
+                <div onclick="openNote(event)"><b>Note</b></div>
+                <div onclick="openEmail()"><b>Email</b></div>
+            </div>
+        </div>
+          <button class="icon-btn" onclick="refreshTimeline(event)">↻</button>
+    </div>
+</div>
+
+<!-- ========= FILTER ========= -->
+<div class="toolbar">
+    <button onclick="filterType('all')">All</button>
+    <button onclick="filterType('email')">Emails</button>
+    <button onclick="filterType('note')">Notes</button>
+    <button onclick="filterType('post')">Posts</button>
+</div>
+
+<div id="loader" style="display:none; text-align:center; padding:10px;">Loading...</div>
+<!-- ========= TIMELINE ========= -->
+<div id="timeline" class="timeline"></div>
+
+<!-- ========= NOTE MODAL ========= -->
+<div id="noteModal" class="modal" onclick="closeNoteByBackdrop(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3>Add Note</h3>
+            <button onclick="closeNote()">✕</button>
+        </div>
+        <textarea id="noteText"></textarea>
+        <div style="margin-top:8px">
+            <input type="file" id="noteFile">
+        </div>
+        <div style="text-align:right;margin-top:10px">
+            <button onclick="saveNote()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ========= CONTEXT ========= */
+const clientUrl = parent.Xrm.Utility.getGlobalContext().getClientUrl();
+const recordId = parent.Xrm.Page.data.entity.getId().replace(/[{}]/g,"");
+
+/* ========= STATE ========= */
+let items=[];
+let sortDesc=true;
+let currentFilter="all";
+let serverNowUtc=null;
+
+/* ========= SERVER TIME ========= */
+async function getServerTime(){
+    const r=await fetch(`${clientUrl}/api/data/v9.0/WhoAmI`,{credentials:"same-origin"});
+    serverNowUtc=new Date(r.headers.get("Date"));
+}
+
+
+/* ========= TIME (KSA) ========= */
+function formatKsa(utc){
+    if (!utc) return "—";
+    const created = new Date(utc);
+    const diff = Math.floor((serverNowUtc - created) / 1000);
+
+    if (diff < 60) return "Just now";
+    if (diff < 7200) { // 2 hours = 7200 seconds
+        if (diff < 3600) return Math.floor(diff / 60) + " minutes ago";
+        return Math.floor(diff / 3600) + " hours ago";
+    }
+
+    const d = new Date(utc);
+    return new Date(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        d.getUTCHours() + 3,
+        d.getUTCMinutes(),
+        d.getUTCSeconds()
+    ).toLocaleString("en-US");
+}
+
+
+/* ========= MENU ========= */
+function togglePlus(e){
+    e.stopPropagation();
+    const m=document.getElementById("plusMenu");
+    m.style.display=m.style.display==="block"?"none":"block";
+}
+document.addEventListener("click",()=>document.getElementById("plusMenu").style.display="none");
+
+/* ========= ACTIONS ========= */
+function refreshTimeline(e){
+    console.log('Refreshing timeline');
+    e.stopPropagation();
+     document.getElementById("loader").style.display = "block";
+    load();
+}
+
+function openEmail(){
+    parent.Xrm.Utility.openEntityForm("email",null,{
+        regardingobjectid:{id:recordId,entityType:"incident"}
+    });
+}
+function openNote(e){
+    e.stopPropagation();
+    document.getElementById("noteModal").style.display="flex";
+}
+function closeNote(){document.getElementById("noteModal").style.display="none";}
+function closeNoteByBackdrop(e){if(e.target.id==="noteModal")closeNote();}
+
+/* ========= SORT / FILTER ========= */
+function toggleSort(){
+    sortDesc = !sortDesc;
+    document.getElementById("sortLabel").innerText = sortDesc ? "⮟" : "⮝";
+    items.sort((a, b) => sortDesc ? new Date(b.createdon) - new Date(a.createdon) : new Date(a.createdon) - new Date(b.createdon));
+    render();
+}
+
+// ...existing code...
+function filterType(t){currentFilter=t;render();}
+
+/* ========= HELPERS ========= */
+function initials(n){return n?n.split(" ").map(x=>x[0]).join("").substring(0,2):"?"}
+function toggleEmail(id){
+    const e=document.getElementById("email-"+id);
+    e.style.display=e.style.display==="block"?"none":"block";
+}
+function openOob(entity,id){parent.Xrm.Utility.openEntityForm(entity,id);}
+
+/* ========= FETCH ========= */
+async function fx(set,xml){
+    const r=await fetch(`${clientUrl}/api/data/v9.0/${set}?fetchXml=${encodeURIComponent(xml)}`,{credentials:"same-origin"});
+    const j=await r.json(); return j.value||[];
+}
+
+/* ========= LOAD ========= */
+async function load(){
+      console.log('Loading data');
+    items=[];
+    await getServerTime();
+
+    /* EMAILS – OOB METHOD */
+   const emails = await fx("activitypointers", `
+<fetch>
+  <entity name="activitypointer">
+    <attribute name="activityid"/>
+    <attribute name="createdon"/>
+
+    <filter>
+      <condition attribute="activitytypecode" operator="eq" value="4202"/> <!-- EMAIL -->
+      <condition attribute="regardingobjectid" operator="eq" value="${recordId}"/>
+    </filter>
+
+    <link-entity name="email"
+                 from="activityid"
+                 to="activityid"
+                 alias="e">
+      <attribute name="subject"/>
+      <attribute name="description"/>
+    </link-entity>
+
+    <link-entity name="systemuser"
+                 from="systemuserid"
+                 to="ownerid"
+                 alias="u">
+      <attribute name="fullname"/>
+    </link-entity>
+  </entity>
+</fetch>
+`);
+
+
+    emails.forEach(e => {
+    e.type = "email";
+    e.id = e.activityid;
+    e.subject = e["e.subject"];
+    e.description = e["e.description"];
+});
+
+    /* NOTES */
+    const notes=await fx("annotations",`
+    <fetch>
+      <entity name="annotation">
+        <attribute name="annotationid"/>
+        <attribute name="notetext"/>
+        <attribute name="createdon"/>
+        <link-entity name="systemuser" from="systemuserid" to="ownerid" alias="u">
+            <attribute name="fullname"/>
+        </link-entity>
+        <filter><condition attribute="objectid" operator="eq" value="${recordId}"/></filter>
+      </entity>
+    </fetch>`);
+    notes.forEach(n=>{n.type="note";});
+
+    /* POSTS */
+    const posts=await fx("posts",`
+    <fetch>
+      <entity name="post">
+        <attribute name="postid"/>
+        <attribute name="text"/>
+        <attribute name="createdon"/>
+        <link-entity name="systemuser" from="systemuserid" to="createdby" alias="u">
+            <attribute name="fullname"/>
+        </link-entity>
+        <filter><condition attribute="regardingobjectid" operator="eq" value="${recordId}"/></filter>
+      </entity>
+    </fetch>`);
+    posts.forEach(p=>{p.type="post";});
+
+    items=[...emails,...notes,...posts]
+      .sort((a,b)=>new Date(b.createdon)-new Date(a.createdon));
+
+    render();
+}
+
+/* ========= RENDER ========= */
+function render(){
+    const list=currentFilter==="all"?items:items.filter(i=>i.type===currentFilter);
+    console.log('Filtered items count:', list.length);
+    document.getElementById("loader").style.display = "none";
+    document.getElementById("timeline").innerHTML=list.map(i=>{
+        const owner=i["u.fullname"]||"User";
+        const av=initials(owner);
+        const time=formatKsa(i.createdon);
+
+        if(i.type==="email")return`
+        <div class="item">
+            <div class="avatar">${av}</div>
+            <div class="header">Email: <b>${i.subject||"(No Subject)"}</b> · <span class="time">${time}</span></div>
+            <div class="email-actions">
+                <a onclick="toggleEmail('${i.id}')">Expand</a>
+                <a onclick="openOob('email','${i.id}')">Open</a>
+            </div>
+            <div class="body" id="email-${i.id}">${i.description||""}</div>
+        </div>`;
+
+        if(i.type==="note")return`
+        <div class="item">
+            <div class="avatar">${av}</div>
+            <div class="header">Note by <b>${owner}</b> · <span class="time">${time}</span></div>
+            <div class="body always">${i.notetext||""}</div>
+        </div>`;
+
+        return`
+        <div class="item">
+            <div class="avatar">${av}</div>
+            <div class="header">Post by <b>${owner}</b> · <span class="time">${time}</span></div>
+            <div class="body always">${i.text||""}</div>
+        </div>`;
+    }).join("");
+     document.getElementById("loader").style.display = "none";
+}
+
+/* ========= SAVE NOTE ========= */
+async function saveNote(){
+    const text=document.getElementById("noteText").value;
+    if(!text)return alert("Enter note");
+
+    await fetch(`${clientUrl}/api/data/v9.0/annotations`,{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        credentials:"same-origin",
+        body:JSON.stringify({
+            notetext:text,
+            "objectid_incident@odata.bind":`/incidents(${recordId})`
+        })
+    });
+
+    closeNote();
+    document.getElementById("noteText").value="";
+    load();
+}
+
+/* ========= INIT ========= */
+load();
+</script>
+
+
+<grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></body></html>
