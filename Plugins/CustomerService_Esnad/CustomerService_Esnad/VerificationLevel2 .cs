@@ -15,6 +15,10 @@ namespace CustomerService_Esnad
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
         private const int SafeMaxLength = 5000;
         private const string StaticTeamName = "Customer Experience Management Team";
+        private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Dev
+        // private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Prod
+        private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Dev
+        // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -47,10 +51,12 @@ namespace CustomerService_Esnad
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
                 string ticketNumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? "(No number)";
 
-                // Resolve owner. If you want to use static team instead, uncomment the next line:
-                var ownerRef = GetTeamByName(service, StaticTeamName, tracing);
-                //var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
-                tracing.Trace($"Incident loaded. Title='{caseTitle}', Ticket='{ticketNumber}', Owner='{ownerRef?.Name}' ({ownerRef?.LogicalName})");
+                //// Resolve owner. If you want to use static team instead, uncomment the next line:
+                //var ownerRef = GetTeamByName(service, StaticTeamName, tracing);
+                ////var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+                //tracing.Trace($"Incident loaded. Title='{caseTitle}', Ticket='{ticketNumber}', Owner='{ownerRef?.Name}' ({ownerRef?.LogicalName})");
+                var ownerRef = new EntityReference("team", StaticTeamId);
+                tracing.Trace($"Using static TeamId: {StaticTeamId}");
 
                 // get crmadmin user if available
                 var crmAdmin = GetCRMAdminUser(service);
@@ -105,7 +111,7 @@ namespace CustomerService_Esnad
             string teamName,
             IPluginExecutionContext context)
         {
-            var users = GetDepartmentManagerInTeam(service, teamId, tracing);
+            var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
             if (users == null || users.Count == 0)
             {
                 tracing.Trace($"No Department Manager users found for team {teamId}. Skipping.");
@@ -270,6 +276,32 @@ namespace CustomerService_Esnad
             var result = service.RetrieveMultiple(new FetchExpression(fetchXml));
             tracing.Trace($"GetDepartmentManagerInTeam: fetched {result.Entities.Count} user(s) for team {teamId}.");
             return result.Entities.ToList();
+        }
+
+        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
+        {
+            var fetch = $@"
+<fetch>
+  <entity name='systemuser'>
+    <attribute name='systemuserid' />
+    <attribute name='fullname' />
+    <attribute name='internalemailaddress' />
+    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='teamid' operator='eq' value='{teamId}'/>
+      </filter>
+    </link-entity>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='roleid' operator='eq' value='{roleId}' />
+      </filter>
+    </link-entity>
+  </entity>
+</fetch>";
+
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
+            return res.Entities.ToList();
         }
 
         private Entity GetCRMAdminUser(IOrganizationService service)

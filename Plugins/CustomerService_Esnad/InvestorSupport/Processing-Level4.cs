@@ -12,7 +12,9 @@ namespace InvestorSupport
         private const string RecipientFieldOnIncident = "new_notificationusersprocessingl4";
         // Role name that identifies CEO
         private const string CeoRoleName = "KI: CEO";
-        // Environment variable logical name to read Org URL (optional)
+        private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Dev
+       // private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Prod
+       // Environment variable logical name to read Org URL (optional)
         private const string OrgUrlEnvName = "OrgURL";
 
         public void Execute(IServiceProvider serviceProvider)
@@ -64,7 +66,8 @@ namespace InvestorSupport
                 string caseUrl = string.IsNullOrEmpty(orgUrl) ? "" : $"{orgUrl}{caseId}";
 
                 // Get all CEOs (active, have email, accessmode=0)
-                var ceos = GetCEOs(service, tracing);
+                //var ceos = GetCEOs(service, tracing);
+                var ceos = GetUsersByRole(service,RoleIdToFind, tracing);
                 if (ceos == null || ceos.Count == 0)
                 {
                     tracing.Trace("SLALevel4: No CEO users found. Updating incident field and exiting without sending email.");
@@ -247,7 +250,7 @@ namespace InvestorSupport
             try
             {
                 var coll = service.RetrieveMultiple(new FetchExpression(fetchXml));
-                tracing.Trace($"SLALevel4: GetCEOs fetched {coll.Entities.Count} record(s) for role '{CeoRoleName}'.");
+                tracing.Trace($"SLALevel4: GetUsersByRole fetched {coll.Entities.Count} record(s) for role '{CeoRoleName}'.");
                 return coll.Entities.ToList();
             }
             catch (Exception ex)
@@ -255,6 +258,34 @@ namespace InvestorSupport
                 tracing.Trace("SLALevel4: GetCEOs fetch error: " + ex.ToString());
                 return new List<Entity>();
             }
+        }
+        private List<Entity> GetUsersByRole(
+    IOrganizationService service,
+    Guid roleId,
+    ITracingService tracing)
+        {
+            var fetch = $@"
+                    <fetch distinct='true'>
+                      <entity name='systemuser'>
+                        <attribute name='systemuserid' />
+                        <attribute name='fullname' />
+                        <attribute name='internalemailaddress' />
+                        <link-entity name='systemuserroles'
+                                     from='systemuserid'
+                                     to='systemuserid'
+                                     link-type='inner'>
+                          <filter>
+                            <condition attribute='roleid'
+                                       operator='eq'
+                                       value='{roleId}' />
+                          </filter>
+                        </link-entity>
+                      </entity>
+                    </fetch>";
+
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRole: found {res.Entities.Count} user(s) with roleId '{roleId}'.");
+            return res.Entities.ToList();
         }
 
         /// <summary>

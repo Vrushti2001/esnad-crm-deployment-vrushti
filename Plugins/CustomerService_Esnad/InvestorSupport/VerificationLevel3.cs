@@ -11,6 +11,8 @@ namespace InvestorSupport
     {
         private const string RecipientFieldOnIncident = "new_notificationusersverificationl3";
         private const string OrgUrlEnvName = "OrgURL";
+        private static readonly Guid RoleIdToFind = new Guid("AE319023-B8BF-F011-A42C-F76DBBE58AA4");//Dev
+      // private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -62,7 +64,7 @@ namespace InvestorSupport
                 if (ownerRef != null && ownerRef.LogicalName == "team")
                 {
                     tracing.Trace($"VerificationLevel3: Owner is team {ownerRef.Id}. Fetching sector heads in team.");
-                    recipients.AddRange(GetSectorHeadInTeam(service, ownerRef.Id, tracing));
+                    recipients.AddRange(GetUsersByRoleInTeam(service, ownerRef.Id, RoleIdToFind, tracing));
                 }
                 else if (ownerRef != null && ownerRef.LogicalName == "systemuser")
                 {
@@ -71,7 +73,7 @@ namespace InvestorSupport
                     tracing.Trace($"VerificationLevel3: Found {teams.Count} teams for owner.");
                     foreach (var team in teams)
                     {
-                        recipients.AddRange(GetSectorHeadInTeam(service, team.Id, tracing));
+                        recipients.AddRange(GetUsersByRoleInTeam(service, ownerRef.Id, RoleIdToFind, tracing));
                     }
                 }
                 else
@@ -235,7 +237,31 @@ namespace InvestorSupport
             tracing.Trace($"VerificationLevel3: Found {result.Entities.Count} Sector Head(s) in team {teamId}.");
             return result.Entities.ToList();
         }
+        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
+        {
+            var fetch = $@"
+<fetch>
+  <entity name='systemuser'>
+    <attribute name='systemuserid' />
+    <attribute name='fullname' />
+    <attribute name='internalemailaddress' />
+    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='teamid' operator='eq' value='{teamId}'/>
+      </filter>
+    </link-entity>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='roleid' operator='eq' value='{roleId}' />
+      </filter>
+    </link-entity>
+  </entity>
+</fetch>";
 
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
+            return res.Entities.ToList();
+        }
         private Entity GetCrmAdminUser(IOrganizationService service)
         {
             var q = new QueryExpression("systemuser")

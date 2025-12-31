@@ -13,6 +13,8 @@ namespace InvestorSupport
         // Adjust these constants as needed
         private const string NotificationFieldLogicalName = "new_notificationusersprocessingl1";
         private const string RoleNameToFind = "KI: Relationship Manager"; // change if a different role is required
+        private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Dev
+       // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
         private const int SafeMaxRecipientsLength = 3800;
 
         public void Execute(IServiceProvider serviceProvider)
@@ -69,7 +71,7 @@ namespace InvestorSupport
                 if (ownerRef.LogicalName == "team")
                 {
                     tracing.Trace("Owner is a team — fetching users with role in that team.");
-                    var users = GetUsersByRoleInTeam(service, ownerRef.Id, RoleNameToFind, tracing);
+                    var users = GetUsersByRoleInTeam(service, ownerRef.Id, RoleIdToFind, tracing);
                     AddUsersToRecipientLists(users, recipientsParties, recipientsDisplay);
                 }
                 else if (ownerRef.LogicalName == "systemuser")
@@ -78,7 +80,7 @@ namespace InvestorSupport
                     var teams = GetUserTeams(service, ownerRef.Id, tracing);
                     foreach (var team in teams)
                     {
-                        var users = GetUsersByRoleInTeam(service, team.Id, RoleNameToFind, tracing);
+                        var users = GetUsersByRoleInTeam(service, team.Id, RoleIdToFind, tracing);
                         AddUsersToRecipientLists(users, recipientsParties, recipientsDisplay);
                     }
                 }
@@ -210,7 +212,7 @@ namespace InvestorSupport
             return res.Entities.ToList();
         }
 
-        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, string roleName, ITracingService tracing)
+        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
         {
             var fetch = $@"
 <fetch>
@@ -224,16 +226,15 @@ namespace InvestorSupport
       </filter>
     </link-entity>
     <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
-      <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
-        <filter>
-          <condition attribute='name' operator='eq' value='{SecurityElement.Escape(roleName)}' />
-        </filter>
-      </link-entity>
+      <filter>
+        <condition attribute='roleid' operator='eq' value='{roleId}' />
+      </filter>
     </link-entity>
   </entity>
 </fetch>";
+
             var res = service.RetrieveMultiple(new FetchExpression(fetch));
-            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with role '{roleName}' in team {teamId}.");
+            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
             return res.Entities.ToList();
         }
 

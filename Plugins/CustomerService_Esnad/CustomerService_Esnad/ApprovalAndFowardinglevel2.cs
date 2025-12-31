@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Crm.Sdk.Messages;
+using System.Web.Security;
 
 namespace CustomerService_Esnad
 {
@@ -13,6 +14,10 @@ namespace CustomerService_Esnad
         private const string NotificationFieldLogicalName = "new_notificationusersassignmentl1";
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
         private const string StaticTeamName = "Customer Experience Management Team";
+        private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Dev
+     // private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Prod
+        private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Dev
+        // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
         private const int SafeMaxLength = 5000;
 
         public void Execute(IServiceProvider serviceProvider)
@@ -43,16 +48,20 @@ namespace CustomerService_Esnad
                 tracing.Trace($"Incident loaded. Title='{caseTitle}', Ticket='{ticketNumber}'");
 
                 // Resolve team by name
-                var teamRef = GetTeamByName(service, StaticTeamName, tracing);
-                if (teamRef == null)
-                {
-                    tracing.Trace($"Team '{StaticTeamName}' not found. Exiting plugin.");
-                    return;
-                }
-                tracing.Trace($"Team resolved: {teamRef.Name} ({teamRef.Id})");
+                //var teamRef = GetTeamByName(service, StaticTeamName, tracing);
+                //if (teamRef == null)
+                //{
+                //    tracing.Trace($"Team '{StaticTeamName}' not found. Exiting plugin.");
+                //    return;
+                //}
+                //tracing.Trace($"Team resolved: {teamRef.Name} ({teamRef.Id})");
+                var teamRef = new EntityReference("team", StaticTeamId);
+                tracing.Trace($"Using static TeamId: {StaticTeamId}");
+
 
                 // Get department managers in the team
-                var managers = GetDepartmentManagersInTeam(service, teamRef.Id, tracing);
+                //var managers = GetDepartmentManagersInTeam(service, teamRef.Id, tracing);
+                var managers = GetUsersByRoleInTeam( service, teamRef.Id, RoleIdToFind,  tracing);
                 if (managers == null || managers.Count == 0)
                 {
                     tracing.Trace($"No users with role '{DepartmentManagerRoleName}' found in team '{teamRef.Name}'. Exiting.");
@@ -135,19 +144,36 @@ namespace CustomerService_Esnad
       <p>عنوان التذكرة:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
+      <p>المسؤول عنها: Customer Experience Management Team</p>
       <p>رقم التذكرة: {ticketNumber}</p>
+      <p>يرجى اتخاذ الإجراءات اللازمة حسب آلية التصعيد المعتمدة لضمان سرعة المعالجة.</p>
+      <p>شكرًا لتعاونكم،</p>
+      <p>مركز دعم المستثمرين لقطاع التعدين</p>
     </div>
+
     <hr style='border:0; border-top:1px solid #ccc; margin:20px 0;' />
+
     <div dir='ltr' style='text-align:left; margin-top:20px;'>
       <p>With Regards and Appreciation,</p>
-      <p>Ticket Title: <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a></p>
+      <p>We would like to inform you that the following ticket has exceeded the time frame specified in the Service Level Agreement (SLA):</p>
+      <p>Ticket Title:
+        <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
+      </p>
+      <p>Responsible Team: Customer Experience Management Team</p>
       <p>Ticket Number: {ticketNumber}</p>
-      <p>Thank you,</p>
-      <p><img src='{imageUrl}' alt='Logo' style='width:200px;' /></p>
+      <p>Please take the necessary actions according to the approved escalation procedure to ensure prompt handling.</p>
+      <br/>
+      <p>Thank you for your cooperation,</p>
+      <p>Investor Support Center – Mining Sector</p>
+      <p>
+        <img src='{imageUrl}' alt='CRM Logo' style='width:200px; margin-bottom:10px;' />
+      </p>
     </div>
+
   </body>
 </html>";
 
+             
                 var email = new Entity("email");
                 email["subject"] = $"[SLA Escalation Level 1 - Department Manager] - Case {ticketNumber}";
                 email["description"] = body;
@@ -229,7 +255,31 @@ namespace CustomerService_Esnad
             tracing.Trace($"GetDepartmentManagersInTeam: fetched {coll.Entities.Count} user(s).");
             return coll.Entities.ToList();
         }
+        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
+        {
+            var fetch = $@"
+<fetch>
+  <entity name='systemuser'>
+    <attribute name='systemuserid' />
+    <attribute name='fullname' />
+    <attribute name='internalemailaddress' />
+    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='teamid' operator='eq' value='{teamId}'/>
+      </filter>
+    </link-entity>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='roleid' operator='eq' value='{roleId}' />
+      </filter>
+    </link-entity>
+  </entity>
+</fetch>";
 
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
+            return res.Entities.ToList();
+        }
         private static Entity GetCrmAdminUser(IOrganizationService service, ITracingService tracing)
         {
             var q = new QueryExpression("systemuser")

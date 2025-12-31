@@ -3,6 +3,7 @@ using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Web.Security;
 
 namespace InvestorSupport
 {
@@ -10,6 +11,8 @@ namespace InvestorSupport
     {
         private const string RecipientFieldOnIncident = "new_notificationusersverificationl1";
         private const string OrgUrlEnvName = "OrgURL";
+        private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Dev
+         // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -61,7 +64,8 @@ namespace InvestorSupport
                 if (ownerRef != null && ownerRef.LogicalName == "team")
                 {
                     tracing.Trace($"VerificationLevel1: Owner is team {ownerRef.Id}. Fetching sector heads in team.");
-                    var users = GetSectorHeadInTeam(service, ownerRef.Id, tracing);
+                    //var users = GetSectorHeadInTeam(service, ownerRef.Id, tracing);
+                    var users = GetUsersByRoleInTeam(service, ownerRef.Id, RoleIdToFind, tracing);
                     recipients.AddRange(users);
                 }
                 else if (ownerRef != null && ownerRef.LogicalName == "systemuser")
@@ -71,7 +75,8 @@ namespace InvestorSupport
                     tracing.Trace($"VerificationLevel1: Found {teams.Count} teams for owner.");
                     foreach (var team in teams)
                     {
-                        var users = GetSectorHeadInTeam(service, team.Id, tracing);
+                        //var users = GetSectorHeadInTeam(service, team.Id, tracing);
+                        var users = GetUsersByRoleInTeam(service, ownerRef.Id, RoleIdToFind, tracing);
                         recipients.AddRange(users);
                     }
                 }
@@ -236,7 +241,31 @@ namespace InvestorSupport
             tracing.Trace($"VerificationLevel1: Found {result.Entities.Count} sector head(s) in team {teamId}.");
             return result.Entities.ToList();
         }
+        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
+        {
+            var fetch = $@"
+<fetch>
+  <entity name='systemuser'>
+    <attribute name='systemuserid' />
+    <attribute name='fullname' />
+    <attribute name='internalemailaddress' />
+    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='teamid' operator='eq' value='{teamId}'/>
+      </filter>
+    </link-entity>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='roleid' operator='eq' value='{roleId}' />
+      </filter>
+    </link-entity>
+  </entity>
+</fetch>";
 
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
+            return res.Entities.ToList();
+        }
         private Entity GetCrmAdminUser(IOrganizationService service)
         {
             var q = new QueryExpression("systemuser")

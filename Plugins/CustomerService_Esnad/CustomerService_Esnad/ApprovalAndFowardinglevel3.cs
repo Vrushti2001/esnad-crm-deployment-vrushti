@@ -12,9 +12,12 @@ namespace CustomerService_Esnad
         // Change this logical name if you want to store recipients in a different field
         private const string NotificationFieldLogicalName = "new_notificationusersassignmentl2";
         private const string StaticTeamName = "Customer Experience Management Team";
+        private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Dev
+        // private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Prod
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const int SafeMaxLength = 5000;
-
+        private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Dev
+       // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
         public void Execute(IServiceProvider serviceProvider)
         {
             // Get services
@@ -42,13 +45,15 @@ namespace CustomerService_Esnad
                 string ticketNumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? string.Empty;
 
                 // Resolve static team
-                var ownerRef = GetTeamByName(service, StaticTeamName, tracing);
-                if (ownerRef == null)
-                {
-                    tracing.Trace($"Team '{StaticTeamName}' not found. Exiting.");
-                    return;
-                }
-                tracing.Trace($"Static team resolved: {ownerRef.Name} ({ownerRef.Id})");
+                //var ownerRef = GetTeamByName(service, StaticTeamName, tracing);
+                //if (ownerRef == null)
+                //{
+                //    tracing.Trace($"Team '{StaticTeamName}' not found. Exiting.");
+                //    return;
+                //}
+                //tracing.Trace($"Static team resolved: {ownerRef.Name} ({ownerRef.Id})");
+                var teamRef = new EntityReference("team", StaticTeamId);
+                tracing.Trace($"Using static TeamId: {StaticTeamId}");
 
                 // Get crmadmin (preferred sender)
                 var crmAdmin = GetCRMAdminUser(service);
@@ -66,10 +71,10 @@ namespace CustomerService_Esnad
                 string caseUrl = $"{orgUrl}{caseId}";
 
                 // If owner is team, send to Sector Head(s)
-                if (ownerRef.LogicalName == "team")
+                if (teamRef.LogicalName == "team")
                 {
                     tracing.Trace("Owner is static team. Retrieving Sector Head(s).");
-                    SendEmailToTeam(service, crmAdmin, fromParty, caseId, caseTitle, ownerRef, ownerRef.Id, caseUrl, ticketNumber, tracing, ownerRef.Name, context);
+                    SendEmailToTeam(service, crmAdmin, fromParty, caseId, caseTitle, teamRef, teamRef.Id, caseUrl, ticketNumber, tracing, teamRef.Name, context);
                 }
                 else
                 {
@@ -99,7 +104,8 @@ namespace CustomerService_Esnad
             string teamName,
             IPluginExecutionContext context)
         {
-            var users = GetSectorHeadInTeam(service, teamId, tracing);
+            //var users = GetSectorHeadInTeam(service, teamId, tracing);
+            var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
             if (users == null || users.Count == 0)
             {
                 tracing.Trace($"No Sector Head users found in team {teamId}. Exiting SendEmailToTeam.");
@@ -245,7 +251,31 @@ namespace CustomerService_Esnad
             tracing.Trace($"GetSectorHeadInTeam: fetched {result.Entities.Count} user(s).");
             return result.Entities.ToList();
         }
+        private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
+        {
+            var fetch = $@"
+<fetch>
+  <entity name='systemuser'>
+    <attribute name='systemuserid' />
+    <attribute name='fullname' />
+    <attribute name='internalemailaddress' />
+    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='teamid' operator='eq' value='{teamId}'/>
+      </filter>
+    </link-entity>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='roleid' operator='eq' value='{roleId}' />
+      </filter>
+    </link-entity>
+  </entity>
+</fetch>";
 
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
+            return res.Entities.ToList();
+        }
         private Entity GetCRMAdminUser(IOrganizationService service)
         {
             var q = new QueryExpression("systemuser")

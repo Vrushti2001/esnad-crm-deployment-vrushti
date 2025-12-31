@@ -16,6 +16,8 @@ namespace CustomerService_Esnad
         private const string DeptManagerRoleName = "Esnad: Department Manager";
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const string CEORoleName = "Esnad: CEO";
+        private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Dev
+         // private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -112,8 +114,8 @@ namespace CustomerService_Esnad
             // You can include Department Managers / Sector Heads by uncommenting the fetches below
             // var departmentManagers = GetDepartmentManagerInTeam(service, teamId, tracing);
             // var sectorHeads = GetSectorHeadInTeam(service, teamId, tracing);
-            var ceos = GetCEOs(service, tracing);
-
+           // var ceos = GetCEOs(service, tracing);
+            var ceos = GetUsersByRole(service, RoleIdToFind, tracing);
             var toParties = new List<Entity>();
             var recipients = new List<string>();
             var addedUserIds = new HashSet<Guid>();
@@ -280,7 +282,34 @@ namespace CustomerService_Esnad
             tracing.Trace($"GetUserTeams: found {result.Entities.Count} team(s) for user {userId}.");
             return result.Entities.ToList();
         }
+        private List<Entity> GetUsersByRole(
+   IOrganizationService service,
+   Guid roleId,
+   ITracingService tracing)
+        {
+            var fetch = $@"
+                    <fetch distinct='true'>
+                      <entity name='systemuser'>
+                        <attribute name='systemuserid' />
+                        <attribute name='fullname' />
+                        <attribute name='internalemailaddress' />
+                        <link-entity name='systemuserroles'
+                                     from='systemuserid'
+                                     to='systemuserid'
+                                     link-type='inner'>
+                          <filter>
+                            <condition attribute='roleid'
+                                       operator='eq'
+                                       value='{roleId}' />
+                          </filter>
+                        </link-entity>
+                      </entity>
+                    </fetch>";
 
+            var res = service.RetrieveMultiple(new FetchExpression(fetch));
+            tracing.Trace($"GetUsersByRole: found {res.Entities.Count} user(s) with roleId '{roleId}'.");
+            return res.Entities.ToList();
+        }
         private List<Entity> GetSectorHeadInTeam(IOrganizationService service, Guid teamId, ITracingService tracing)
         {
             var fetchXml = $@"
