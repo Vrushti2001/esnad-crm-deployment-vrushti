@@ -13,7 +13,7 @@ namespace CustomerService_Esnad
         private const string NotificationFieldLogicalName = "new_notificationusersprocessingl1"; // <-- adjust if needed
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
         private const int SafeMaxLength = 5000;
-        private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Dev
+        private static readonly Guid RoleIdToFind = new Guid("FDE06907-B53F-F011-AE53-D066006ED8F0");//Dev
        // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
 
         public void Execute(IServiceProvider serviceProvider)

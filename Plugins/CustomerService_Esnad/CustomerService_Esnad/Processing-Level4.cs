@@ -16,7 +16,7 @@ namespace CustomerService_Esnad
         private const string DeptManagerRoleName = "Esnad: Department Manager";
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const string CEORoleName = "Esnad: CEO";
-        private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Dev
+        private static readonly Guid RoleIdToFind = new Guid("0FB723E8-A0E4-4509-AC81-D9296A9A28D7");//Dev
          // private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
