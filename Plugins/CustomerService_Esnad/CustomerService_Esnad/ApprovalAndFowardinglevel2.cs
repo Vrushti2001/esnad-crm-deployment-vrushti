@@ -13,10 +13,10 @@ namespace CustomerService_Esnad
         // Change if you want a different logical name on the incident
         private const string NotificationFieldLogicalName = "new_notificationusersassignmentl1";
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
-        private const string StaticTeamName = "Customer Experience Management Team";
-        private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Dev
-     // private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Prod
-        private static readonly Guid RoleIdToFind = new Guid("FDE06907-B53F-F011-AE53-D066006ED8F0");//Dev
+        private const string StaticTeamName = "Customer Service Management Team";
+        private static readonly Guid StaticTeamId = new Guid("230121DA-A673-F011-A40D-C0B1F6211923");//Dev
+     // private static readonly Guid StaticTeamId = new Guid("9A685A34-A967-F011-A409-87895D8B1D04");//Prod
+        private static readonly Guid RoleIdToFind = new Guid("b58381fb-b497-4288-b7ba-bd5034035c72");//Dev
         // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
         private const int SafeMaxLength = 5000;
 
@@ -60,8 +60,8 @@ namespace CustomerService_Esnad
 
 
                 // Get department managers in the team
-                //var managers = GetDepartmentManagersInTeam(service, teamRef.Id, tracing);
-                var managers = GetUsersByRoleInTeam( service, teamRef.Id, RoleIdToFind,  tracing);
+                var managers = GetDepartmentManagersInTeam(service, teamRef.Id, tracing);
+                //var managers = GetUsersByRoleInTeam( service, teamRef.Id, RoleIdToFind,  tracing);
                 if (managers == null || managers.Count == 0)
                 {
                     tracing.Trace($"No users with role '{DepartmentManagerRoleName}' found in team '{teamRef.Name}'. Exiting.");
@@ -144,7 +144,7 @@ namespace CustomerService_Esnad
       <p>عنوان التذكرة:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>المسؤول عنها: Customer Experience Management Team</p>
+      <p>المسؤول عنها:Customer Service Management Team</p>
       <p>رقم التذكرة: {ticketNumber}</p>
       <p>يرجى اتخاذ الإجراءات اللازمة حسب آلية التصعيد المعتمدة لضمان سرعة المعالجة.</p>
       <p>شكرًا لتعاونكم،</p>
@@ -159,7 +159,7 @@ namespace CustomerService_Esnad
       <p>Ticket Title:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>Responsible Team: Customer Experience Management Team</p>
+      <p>Responsible Team: Customer Service Management Team</p>
       <p>Ticket Number: {ticketNumber}</p>
       <p>Please take the necessary actions according to the approved escalation procedure to ensure prompt handling.</p>
       <br/>
@@ -175,7 +175,7 @@ namespace CustomerService_Esnad
 
              
                 var email = new Entity("email");
-                email["subject"] = $"[SLA Escalation Level 1 - Department Manager] - Case {ticketNumber}";
+                email["subject"] = $"[Approval and Forwarding SLA Escalation Level 1 to Department Manager]-{ticketNumber}";
                 email["description"] = body;
                 email["directioncode"] = true;
                 email["from"] = new EntityCollection(new[] { fromParty });

@@ -112,7 +112,7 @@ namespace CustomerService_Esnad
       <p>عنوان التذكرة:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>المسؤول عنها: Customer Experience Management Team</p>
+      <p>المسؤول عنها: Customer Service Management Team</p>
       <p>رقم التذكرة: {TicketNumber}</p>
       <p>يرجى اتخاذ الإجراءات اللازمة حسب آلية التصعيد المعتمدة لضمان سرعة المعالجة.</p>
       <p>شكرًا لتعاونكم،</p>
@@ -128,7 +128,7 @@ namespace CustomerService_Esnad
       <p>Ticket Title:
         <a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>
       </p>
-      <p>Responsible Team: Customer Experience Management Team</p>
+      <p>Responsible Team: Customer Service Management Team</p>
       <p>Ticket Number: {TicketNumber}</p>
       <p>Please take the necessary actions according to the approved escalation procedure to ensure prompt handling.</p>
       <br/>

@@ -13,7 +13,7 @@ namespace CustomerService_Esnad
         private const string NotificationFieldLogicalName = "new_notificationusersprocessingl2"; // change if required
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const int SafeMaxLength = 5000;
-        private static readonly Guid RoleIdToFind = new Guid("9E029863-C33F-F011-AE53-D066006ED8F0");//Dev
+        private static readonly Guid RoleIdToFind = new Guid("f273dac8-118d-4c8e-a8b7-dd309fa7f37d");//Dev
         // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -107,7 +107,8 @@ namespace CustomerService_Esnad
             string teamName,
             IPluginExecutionContext context)
         {
-            var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
+            var users = GetSectorHeadInTeam( service, teamId, tracing);
+            //var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
             if (users == null || users.Count == 0)
             {
                 tracing.Trace($"No Sector Head users found in team {teamId} - skipping.");
@@ -156,8 +157,8 @@ namespace CustomerService_Esnad
             Guid fromUserId = crmAdminUser != null ? crmAdminUser.Id : (context.InitiatingUserId != Guid.Empty ? context.InitiatingUserId : context.UserId);
             var fromParty = new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", fromUserId) };
 
-            // build and create email
-            string subject = $"[Processing SLA Escalation Level 2 - Sector Head] {teamName} - Case Breach Alert";
+            // build and create email 
+            string subject = $"[Processing-Department SLA Escalation Level 2 to {teamName} Sector Head]-{ticketNumber}";
             string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
             var email = new Entity("email")

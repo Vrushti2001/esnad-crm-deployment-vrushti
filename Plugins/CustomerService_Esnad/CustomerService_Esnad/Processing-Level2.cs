@@ -13,8 +13,8 @@ namespace CustomerService_Esnad
         private const string NotificationFieldLogicalName = "new_notificationusersprocessingl1"; // <-- adjust if needed
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
         private const int SafeMaxLength = 5000;
-        private static readonly Guid RoleIdToFind = new Guid("FDE06907-B53F-F011-AE53-D066006ED8F0");//Dev
-       // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
+        private static readonly Guid RoleIdToFind = new Guid("b58381fb-b497-4288-b7ba-bd5034035c72");//Dev Esnad: Department Manager
+        // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -102,8 +102,8 @@ namespace CustomerService_Esnad
             string teamName,
             IPluginExecutionContext context)
         {
-            //var users = GetDepartmentManagerInTeam(service, teamId, tracing);
-            var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
+            var users = GetDepartmentManagerInTeam(service, teamId, tracing);
+            //var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
             if (users == null || users.Count == 0)
             {
                 tracing.Trace($"No Department Manager found in team {teamId}. Skipping.");
@@ -154,8 +154,8 @@ namespace CustomerService_Esnad
             Guid fromUserId = crmAdminUser != null ? crmAdminUser.Id : (context.InitiatingUserId != Guid.Empty ? context.InitiatingUserId : context.UserId);
             var fromParty = new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", fromUserId) };
 
-            // Build email
-            string subject = $"[Processing SLA Escalation Level 1 - Department Manager] {teamName} - Case Breach Alert";
+            // Build email 
+            string subject = $"[Processing-Department SLA Escalation Level 1 to {teamName} Department Manager]-{ticketNumber}";
             string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
             var email = new Entity("email")

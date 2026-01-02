@@ -13,11 +13,11 @@ namespace CustomerService_Esnad
         private const string NotificationFieldLogicalName = "new_notificationusersverificationl2"; // change if required
         private const string SectorHeadRoleName = "Esnad: Sector Head";
         private const int SafeMaxLength = 5000;
-        private const string StaticTeamName = "Customer Experience Management Team";
-        private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Dev
-         // private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Prod
-        private static readonly Guid RoleIdToFind = new Guid("9E029863-C33F-F011-AE53-D066006ED8F0");//Dev
-         // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
+        private const string StaticTeamName = "Customer Service Management Team";
+        private static readonly Guid StaticTeamId = new Guid("230121DA-A673-F011-A40D-C0B1F6211923");//Dev
+       // private static readonly Guid StaticTeamId = new Guid("9A685A34-A967-F011-A409-87895D8B1D04");//Prod
+                                                                                                     //private static readonly Guid RoleIdToFind = new Guid("f273dac8-118d-4c8e-a8b7-dd309fa7f37d");//Dev
+                                                                                                     // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -115,7 +115,8 @@ namespace CustomerService_Esnad
             string teamName,
             IPluginExecutionContext context)
         {
-            var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
+            var users = GetSectorHeadInTeam( service,  teamId, tracing);
+            //var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
             if (users == null || users.Count == 0)
             {
                 tracing.Trace($"No Sector Head users found in team {teamId}. Skipping.");
@@ -166,7 +167,7 @@ namespace CustomerService_Esnad
             var fromParty = new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", fromUserId) };
 
             // Create email
-            string subject = $"[Verification SLA Escalation Level 2 - Sector Head] {teamName} - Case Breach Alert";
+            string subject = $"[Verification SLA Escalation Level 2 to {teamName} Sector Head]-{ticketNumber}";
             string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
             var email = new Entity("email")

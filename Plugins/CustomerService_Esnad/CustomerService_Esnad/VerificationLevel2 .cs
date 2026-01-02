@@ -10,15 +10,14 @@ namespace CustomerService_Esnad
 {
     public class VerificationLevel2 : IPlugin
     {
-        // change logical name if required
-        private const string NotificationFieldLogicalName = "new_notificationusersverificationl1";
+        private const string NotificationFieldLogicalName = "new_notificationusersverificationl2"; // change if required
         private const string DepartmentManagerRoleName = "Esnad: Department Manager";
         private const int SafeMaxLength = 5000;
-        private const string StaticTeamName = "Customer Experience Management Team";
-        private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Dev
-        // private static readonly Guid StaticTeamId = new Guid("2B5DFFC5-A573-F011-A40D-C0B1F6211923");//Prod
-        private static readonly Guid RoleIdToFind = new Guid("FDE06907-B53F-F011-AE53-D066006ED8F0");//Dev
-        // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
+        private const string StaticTeamName = "Customer Service Management Team";
+        private static readonly Guid StaticTeamId = new Guid("230121DA-A673-F011-A40D-C0B1F6211923");//Dev
+    // private static readonly Guid StaticTeamId = new Guid("9A685A34-A967-F011-A409-87895D8B1D04");//Prod
+                                                                                                     //private static readonly Guid RoleIdToFind = new Guid("f273dac8-118d-4c8e-a8b7-dd309fa7f37d");//Dev
+                                                                                                     // private static readonly Guid RoleIdToFind = new Guid("98E0066B-FEBE-F011-A42B-C842AD1D2D99");//Prod
 
         public void Execute(IServiceProvider serviceProvider)
         {
@@ -27,7 +26,7 @@ namespace CustomerService_Esnad
             var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
             var service = factory.CreateOrganizationService(context.UserId);
 
-            tracing.Trace("VerificationLevel2 plugin started.");
+            tracing.Trace("VerificationLevel3Plugin started.");
 
             try
             {
@@ -38,9 +37,8 @@ namespace CustomerService_Esnad
                 }
 
                 Guid caseId = caseRef.Id;
-                tracing.Trace($"CaseId: {caseId}");
+                tracing.Trace($"Processing Case ID: {caseId}");
 
-                // Retrieve incident
                 var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "ticketnumber", "ownerid"));
                 if (caseEntity == null)
                 {
@@ -48,53 +46,59 @@ namespace CustomerService_Esnad
                     return;
                 }
 
+                // Ensure owner exists (you previously used a static team; keep both patterns available)
+                // var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
+                //var ownerRef = GetTeamByName(service, StaticTeamName, tracing);
+                //if (ownerRef == null)
+                //{
+                //    tracing.Trace("Incident has no owner. Exiting.");
+                //    return;
+                //}
+
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "(No Title)";
                 string ticketNumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? "(No number)";
 
-                //// Resolve owner. If you want to use static team instead, uncomment the next line:
-                //var ownerRef = GetTeamByName(service, StaticTeamName, tracing);
-                ////var ownerRef = caseEntity.GetAttributeValue<EntityReference>("ownerid");
-                //tracing.Trace($"Incident loaded. Title='{caseTitle}', Ticket='{ticketNumber}', Owner='{ownerRef?.Name}' ({ownerRef?.LogicalName})");
+                // tracing.Trace($"Incident loaded. Title='{caseTitle}', Ticket='{ticketNumber}', Owner='{ownerRef.Name}' ({ownerRef.LogicalName})");
                 var ownerRef = new EntityReference("team", StaticTeamId);
                 tracing.Trace($"Using static TeamId: {StaticTeamId}");
-
-                // get crmadmin user if available
+                // Try to find crmadmin user to act as sender; fallback to initiating/context user later
                 var crmAdmin = GetCRMAdminUser(service);
-                if (crmAdmin == null)
-                    tracing.Trace("crmadmin not found - will fall back to initiating/context user as sender.");
+                if (crmAdmin == null) tracing.Trace("crmadmin not found; will fall back to initiating/context user as sender.");
 
                 string orgUrl = GetOrgURL(service, tracing);
                 string caseUrl = $"{orgUrl}{caseId}";
 
-                if (ownerRef != null && ownerRef.LogicalName == "team")
+                // If owner is a team → send to Sector Head(s) of that team
+                if (ownerRef.LogicalName == "team")
                 {
-                    tracing.Trace("Owner is a team - sending to Department Manager(s) of that team.");
+                    tracing.Trace("Owner is a Team - sending to Sector Head(s) of that team.");
                     SendEmailToTeam(service, crmAdmin, caseId, caseTitle, ownerRef, ownerRef.Id, caseUrl, ticketNumber, tracing, ownerRef.Name, context);
                 }
-                else if (ownerRef != null && ownerRef.LogicalName == "systemuser")
+                // If owner is a user → find all teams that user belongs to and send for each team
+                else if (ownerRef.LogicalName == "systemuser")
                 {
-                    tracing.Trace("Owner is a systemuser - retrieving teams for user.");
+                    tracing.Trace("Owner is a SystemUser - retrieving user's teams.");
                     var teams = GetUserTeams(service, ownerRef.Id, tracing);
                     tracing.Trace($"Found {teams.Count} team(s) for user.");
 
-                    foreach (var t in teams)
+                    foreach (var team in teams)
                     {
-                        var teamName = t.GetAttributeValue<string>("name");
-                        tracing.Trace($"Processing team: {teamName} ({t.Id})");
-                        SendEmailToTeam(service, crmAdmin, caseId, caseTitle, ownerRef, t.Id, caseUrl, ticketNumber, tracing, teamName, context);
+                        var teamName = team.GetAttributeValue<string>("name");
+                        tracing.Trace($"Processing team: {teamName} ({team.Id})");
+                        SendEmailToTeam(service, crmAdmin, caseId, caseTitle, ownerRef, team.Id, caseUrl, ticketNumber, tracing, teamName, context);
                     }
                 }
                 else
                 {
-                    tracing.Trace("Owner missing or unknown type - no action taken.");
+                    tracing.Trace("Owner type not supported - no action taken.");
                 }
 
-                tracing.Trace("VerificationLevel2 plugin completed.");
+                tracing.Trace("VerificationLevel3Plugin completed.");
             }
             catch (Exception ex)
             {
                 tracing.Trace("Plugin exception: " + ex.ToString());
-                throw new InvalidPluginExecutionException("Error in VerificationLevel2 plugin.", ex);
+                throw new InvalidPluginExecutionException("Error in VerificationLevel3Plugin.", ex);
             }
         }
 
@@ -111,10 +115,11 @@ namespace CustomerService_Esnad
             string teamName,
             IPluginExecutionContext context)
         {
-            var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
+            var users = GetDepartmentManagerInTeam(service, teamId, tracing);
+            //var users = GetUsersByRoleInTeam(service, teamId, RoleIdToFind, tracing);
             if (users == null || users.Count == 0)
             {
-                tracing.Trace($"No Department Manager users found for team {teamId}. Skipping.");
+                tracing.Trace($"No Sector Head users found in team {teamId}. Skipping.");
                 return;
             }
 
@@ -141,27 +146,28 @@ namespace CustomerService_Esnad
             if (recipientsJoined.Length > SafeMaxLength)
                 recipientsJoined = recipientsJoined.Substring(0, SafeMaxLength);
 
-            tracing.Trace($"Recipients built for team '{teamName}' ({recipientDisplay.Count}). Length={recipientsJoined.Length}");
+            tracing.Trace($"Recipients prepared for team '{teamName}' ({recipientDisplay.Count}). Length={recipientsJoined.Length}");
 
-            // Update incident field (non-blocking)
+            // Update incident field (non-blocking) — store recipient display list
             try
             {
-                var incidentUpdate = new Entity("incident", caseId);
-                incidentUpdate[NotificationFieldLogicalName] = recipientsJoined;
-                service.Update(incidentUpdate);
+                var incidentToUpdate = new Entity("incident", caseId);
+                incidentToUpdate[NotificationFieldLogicalName] = recipientsJoined;
+                service.Update(incidentToUpdate);
                 tracing.Trace($"Incident updated: field '{NotificationFieldLogicalName}' set.");
             }
             catch (Exception exUpd)
             {
                 tracing.Trace($"Warning: failed to update incident field '{NotificationFieldLogicalName}': {exUpd}");
+                // continue to send email
             }
 
-            // Determine sender (from) - prefer crmadmin, else fallback to initiating/context user
+            // Determine sender: prefer crmadmin, else initiating user, else context user
             Guid fromUserId = crmAdminUser != null ? crmAdminUser.Id : (context.InitiatingUserId != Guid.Empty ? context.InitiatingUserId : context.UserId);
             var fromParty = new Entity("activityparty") { ["partyid"] = new EntityReference("systemuser", fromUserId) };
 
-            // Build email
-            string subject = $"[Verification SLA Escalation Level 1 - Department Manager] {teamName} - Case Breach Alert";
+            // Create email
+            string subject = $"[Verification SLA Escalation Level 1 to {teamName} Department Manager]-{ticketNumber}";
             string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg";
 
             var email = new Entity("email")
@@ -170,8 +176,6 @@ namespace CustomerService_Esnad
                 ["description"] = $@"
 <html>
   <body style='font-family:Segoe UI, Tahoma, sans-serif; font-size:14px;'>
-
-    <!-- Arabic section -->
     <div dir='rtl' style='text-align:right; margin-bottom:20px;'>
       <p>مع التحية والتقدير،</p>
       <p>نود إعلامكم بأن التذكرة التالية قد تجاوزت المدة المحددة في اتفاقية مستوى الخدمة (SLA):</p>
@@ -187,7 +191,6 @@ namespace CustomerService_Esnad
 
     <hr style='border:0; border-top:1px solid #ccc; margin:20px 0;' />
 
-    <!-- English section -->
     <div dir='ltr' style='text-align:left; margin-top:20px;'>
       <p>With Regards and Appreciation,</p>
       <p>We would like to inform you that the following ticket has exceeded the time frame specified in the Service Level Agreement (SLA):</p>
@@ -204,7 +207,6 @@ namespace CustomerService_Esnad
         <img src='{imageUrl}' alt='CRM Logo' style='width:200px; margin-bottom:10px;' />
       </p>
     </div>
-
   </body>
 </html>",
                 ["directioncode"] = true,
@@ -217,13 +219,14 @@ namespace CustomerService_Esnad
             Guid emailId = service.Create(email);
             tracing.Trace($"Email created for team {teamName}. ID: {emailId}");
 
-            var sendRequest = new SendEmailRequest
+            // Send email
+            var sendReq = new SendEmailRequest
             {
                 EmailId = emailId,
                 IssueSend = true,
                 TrackingToken = string.Empty
             };
-            service.Execute(sendRequest);
+            service.Execute(sendReq);
             tracing.Trace($"Email sent to team {teamName} successfully.");
         }
 
@@ -277,7 +280,6 @@ namespace CustomerService_Esnad
             tracing.Trace($"GetDepartmentManagerInTeam: fetched {result.Entities.Count} user(s) for team {teamId}.");
             return result.Entities.ToList();
         }
-
         private List<Entity> GetUsersByRoleInTeam(IOrganizationService service, Guid teamId, Guid roleId, ITracingService tracing)
         {
             var fetch = $@"
@@ -303,7 +305,6 @@ namespace CustomerService_Esnad
             tracing.Trace($"GetUsersByRoleInTeam: found {res.Entities.Count} user(s) with roleId '{roleId}' in team {teamId}.");
             return res.Entities.ToList();
         }
-
         private Entity GetCRMAdminUser(IOrganizationService service)
         {
             var q = new QueryExpression("systemuser")
