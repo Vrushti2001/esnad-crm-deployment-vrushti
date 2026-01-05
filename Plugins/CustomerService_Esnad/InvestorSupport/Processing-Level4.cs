@@ -66,8 +66,8 @@ namespace InvestorSupport
                 string caseUrl = string.IsNullOrEmpty(orgUrl) ? "" : $"{orgUrl}{caseId}";
 
                 // Get all CEOs (active, have email, accessmode=0)
-                //var ceos = GetCEOs(service, tracing);
-                var ceos = GetUsersByRole(service,RoleIdToFind, tracing);
+                var ceos = GetCEOs(service, tracing);
+                //var ceos = GetUsersByRole(service,RoleIdToFind, tracing);
                 if (ceos == null || ceos.Count == 0)
                 {
                     tracing.Trace("SLALevel4: No CEO users found. Updating incident field and exiting without sending email.");
@@ -250,7 +250,7 @@ namespace InvestorSupport
             try
             {
                 var coll = service.RetrieveMultiple(new FetchExpression(fetchXml));
-                tracing.Trace($"SLALevel4: GetUsersByRole fetched {coll.Entities.Count} record(s) for role '{CeoRoleName}'.");
+                tracing.Trace($"SLALevel4: CEO fetched {coll.Entities.Count} record(s) for role '{CeoRoleName}'.");
                 return coll.Entities.ToList();
             }
             catch (Exception ex)

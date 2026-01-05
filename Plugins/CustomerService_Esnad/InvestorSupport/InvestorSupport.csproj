@@ -131,6 +131,7 @@
     <Compile Include="ApprovalAndFowardinglevel3.cs" />
     <Compile Include="EmailForSpecializedDepartment.cs" />
     <Compile Include="EmailOnKIComunicationcreate .cs" />
+    <Compile Include="PreventDeleteAnyEntity.cs" />
     <Compile Include="Processing-Leval1.cs" />
     <Compile Include="Processing-Level2.cs" />
     <Compile Include="Processing-Level3.cs" />
