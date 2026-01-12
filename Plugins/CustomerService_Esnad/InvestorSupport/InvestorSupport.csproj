@@ -136,6 +136,7 @@
     <Compile Include="Processing-Level2.cs" />
     <Compile Include="Processing-Level3.cs" />
     <Compile Include="Processing-Level4.cs" />
+    <Compile Include="RestrictUpdateExceptSystemAdmin .cs" />
     <Compile Include="SendCaseReplyNotification.cs" />
     <Compile Include="SetRMDetailsOnIncident.cs" />
     <Compile Include="SmsOnCaseMilestones.cs" />
