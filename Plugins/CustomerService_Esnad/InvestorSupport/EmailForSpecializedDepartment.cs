@@ -221,7 +221,7 @@ namespace InvestorSupport
                 <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
                   <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
                     <filter>
-                      <condition attribute='name' operator='eq' value='KI: Relationship Manager' />
+                      <condition attribute='name' operator='eq' value='KI: Specialized Dept. Officer' />
                     </filter>
                   </link-entity>
                 </link-entity>

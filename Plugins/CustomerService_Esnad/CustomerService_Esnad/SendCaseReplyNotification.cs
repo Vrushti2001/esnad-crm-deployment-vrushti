@@ -2,168 +2,178 @@
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Sdk;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CustomerService_Esnad
-{
-    public class SendCaseReplyNotification : IPlugin
     {
-        //Email to CST team that Customer had been replied.
-        public void Execute(IServiceProvider serviceProvider)
+        public class SendCaseReplyNotification : IPlugin
         {
-            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
-            var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-            var service = serviceFactory.CreateOrganizationService(context.UserId);
-            var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
-
-            tracing.Trace("🔔 Plugin execution started.");
-
-            try
+            //send email to CRM officer of CST while Customer send reply on Return to Customer stage
+            public void Execute(IServiceProvider serviceProvider)
             {
-                if (!context.InputParameters.Contains("CaseId") || !(context.InputParameters["CaseId"] is EntityReference caseRef))
-                    throw new InvalidPluginExecutionException("Missing or invalid 'CaseId' input parameter.");
+                var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+                var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+                var service = serviceFactory.CreateOrganizationService(context.UserId);
+                var tracing = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
 
-                if (!context.InputParameters.Contains("TeamId") || !(context.InputParameters["TeamId"] is EntityReference teamRef))
-                    throw new InvalidPluginExecutionException("Missing or invalid 'TeamId' input parameter.");
+                tracing.Trace("🔔 Plugin execution started.");
 
-                var caseId = caseRef.Id;
-                var teamId = teamRef.Id;
-
-                // Get case title
-                var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title"));
-                string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
-
-                // Get all users in the team
-                var teamUsersQuery = new QueryExpression("teammembership")
+                try
                 {
-                    ColumnSet = new ColumnSet("systemuserid"),
-                    Criteria = new FilterExpression
+                    // ✅ Validate input parameters
+                    if (!context.InputParameters.Contains("CaseId") || !(context.InputParameters["CaseId"] is EntityReference caseRef))
+                        throw new InvalidPluginExecutionException("Missing or invalid 'CaseId' input parameter.");
+
+                    if (!context.InputParameters.Contains("TeamId") || !(context.InputParameters["TeamId"] is EntityReference teamRef))
+                        throw new InvalidPluginExecutionException("Missing or invalid 'TeamId' input parameter.");
+
+                    var caseId = caseRef.Id;
+                    var teamId = teamRef.Id;
+
+                    // ✅ Get case title
+                    var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title"));
+                    string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
+
+                    // ✅ Fetch only users in the team with role = CRM Officer
+                    var fetchXml = $@"
+<fetch>
+  <entity name='systemuser'>
+    <attribute name='systemuserid'/>
+    <attribute name='internalemailaddress'/>
+    <filter>
+      <condition attribute='accessmode' operator='eq' value='0' />
+    </filter>
+    <link-entity name='teammembership' from='systemuserid' to='systemuserid' link-type='inner'>
+      <filter>
+        <condition attribute='teamid' operator='eq' value='{teamId}' />
+      </filter>
+    </link-entity>
+    <link-entity name='systemuserroles' from='systemuserid' to='systemuserid' link-type='inner'>
+      <link-entity name='role' from='roleid' to='roleid' link-type='inner'>
+        <filter>
+          <condition attribute='name' operator='eq' value='Esnad: CRM Officer' />
+        </filter>
+      </link-entity>
+    </link-entity>
+  </entity>
+</fetch>";
+
+                    var users = service.RetrieveMultiple(new FetchExpression(fetchXml)).Entities;
+
+                    if (!users.Any())
                     {
-                        Conditions = {
-                            new ConditionExpression("teamid", ConditionOperator.Equal, teamId)
-                        }
+                        tracing.Trace("❌ No users found in team with position CRM Officer.");
+                        return;
                     }
-                };
 
-                var userIds = service.RetrieveMultiple(teamUsersQuery)
-                    .Entities.Select(e => e.GetAttributeValue<Guid>("systemuserid")).Distinct().ToList();
-
-                if (!userIds.Any())
-                {
-                    tracing.Trace("❌ No users found in the team.");
-                    return;
-                }
-
-                // Build 'To' recipients
-                var toParties = userIds.Select(uid => new Entity("activityparty")
-                {
-                    ["partyid"] = new EntityReference("systemuser", uid)
-                }).ToList();
-
-                // Get CRM Admin user
-                var crmAdmin = service.RetrieveMultiple(new QueryExpression("systemuser")
-                {
-                    ColumnSet = new ColumnSet("systemuserid", "internalemailaddress"),
-                    Criteria = new FilterExpression
+                    // ✅ Build 'To' recipients
+                    var toParties = users.Select(u => new Entity("activityparty")
                     {
-                        Conditions =
+                        ["partyid"] = new EntityReference("systemuser", u.Id)
+                    }).ToList();
+
+                    // ✅ Get CRM Admin user (Sender)
+                    var crmAdmin = service.RetrieveMultiple(new QueryExpression("systemuser")
+                    {
+                        ColumnSet = new ColumnSet("systemuserid", "internalemailaddress"),
+                        Criteria = new FilterExpression
+                        {
+                            Conditions =
                         {
                             new ConditionExpression("domainname", ConditionOperator.Equal, "CRM-ESNAD\\crmadmin"),
                             new ConditionExpression("accessmode", ConditionOperator.Equal, 0)
                         }
-                    }
-                }).Entities.FirstOrDefault();
+                        }
+                    }).Entities.FirstOrDefault();
 
-                if (crmAdmin == null || !crmAdmin.Contains("internalemailaddress"))
-                    throw new InvalidPluginExecutionException("CRM Admin user not found or missing email.");
+                    if (crmAdmin == null || !crmAdmin.Contains("internalemailaddress"))
+                        throw new InvalidPluginExecutionException("CRM Admin user not found or missing email.");
 
-                var fromParty = new Entity("activityparty")
-                {
-                    ["partyid"] = new EntityReference("systemuser", crmAdmin.Id)
-                };
+                    var fromParty = new Entity("activityparty")
+                    {
+                        ["partyid"] = new EntityReference("systemuser", crmAdmin.Id)
+                    };
 
-                // Build email   
-                string orgUrl = GetOrgURL(service, tracing);
-                string caseUrl = $"{orgUrl}{caseId}";
-                string caseTitleHtml = $"<a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>";
+                    // ✅ Build email
+                    string orgUrl = GetOrgURL(service, tracing);
+                    string caseUrl = $"{orgUrl}{caseId}";
+                   // string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg"; // Update with actual logo URL
+
+                    string caseTitleHtml = $"<a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>";
 
                 string emailBody = $@"
-<html>
-  <body>
-    
-    <p>📝 <strong>Customer has responded to the ticket:</strong> {caseTitleHtml}</p>
-    <p>يرجى مراجعة الرد واتخاذ الإجراءات اللازمة.</p>
-    <p><img src='https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg' alt='CRM Logo' style='max-width: 200px;' /></p>
-  </body>
-</html>";
+                    <html>
+                      <body>
+                        <p><strong>Customer has responded to the ticket:</strong> {caseTitleHtml}</p>
+                        <p>يرجى مراجعة الرد واتخاذ الإجراءات اللازمة.</p>
+                        <p><img src='https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg' alt='CRM Logo' style='max-width: 200px;' /></p>
+                      </body>
+                    </html>";
 
                 var email = new Entity("email")
+                    {
+                        ["subject"] = $"Ticket Assigned to Customer service Team: {caseTitle}",
+                        ["description"] = emailBody,
+                        ["directioncode"] = true,
+                        ["from"] = new EntityCollection(new[] { fromParty }),
+                        ["to"] = new EntityCollection(toParties),
+                        ["regardingobjectid"] = new EntityReference("incident", caseId),
+                        ["statuscode"] = new OptionSetValue(1) // Draft
+                    };
+
+                    Guid emailId = service.Create(email);
+                    tracing.Trace($"✅ Email created. ID: {emailId}");
+
+                    // ✅ Send Email
+                    var sendRequest = new SendEmailRequest
+                    {
+                        EmailId = emailId,
+                        IssueSend = true,
+                        TrackingToken = ""
+                    };
+
+                    service.Execute(sendRequest);
+                    tracing.Trace("✅ Email sent successfully via SendEmailRequest.");
+
+                    // ✅ Update case with copy of GUID
+                    var updateCase = new Entity("incident", caseId)
+                    {
+                        ["new_copycaseguid"] = caseId.ToString()
+                    };
+                    service.Update(updateCase);
+                    tracing.Trace("✅ Case updated with new_copycaseguid.");
+                }
+                catch (Exception ex)
                 {
-                    ["subject"] = $"Customer Response for - {caseTitle}",
-                    ["description"] = emailBody,
-                    ["directioncode"] = true,
-                    ["from"] = new EntityCollection(new[] { fromParty }),
-                    ["to"] = new EntityCollection(toParties),
-                    ["regardingobjectid"] = new EntityReference("incident", caseId),
-                    ["statuscode"] = new OptionSetValue(1) // Draft
-                };
+                    tracing.Trace("❌ Exception: " + ex.ToString());
+                    throw new InvalidPluginExecutionException("Error in SendEmailNotificationToCRMOfficer Plugin.", ex);
+                }
 
-                Guid emailId = service.Create(email);
-                tracing.Trace("✅ Email created. ID: " + emailId);
-
-                var sendRequest = new SendEmailRequest
-                {
-                    EmailId = emailId,
-                    IssueSend = true,
-                    TrackingToken = ""
-                };
-
-                service.Execute(sendRequest);
-                tracing.Trace("✅ Email sent via SendEmailRequest.");
-
-                // Update case
-                var updateCase = new Entity("incident", caseId)
-                {
-                    ["new_copycaseguid"] = caseId.ToString()
-                };
-                service.Update(updateCase);
-                tracing.Trace("✅ Case updated with new_copycaseguid.");
-
+                tracing.Trace("🏁 Plugin execution completed.");
             }
-            catch (Exception ex)
-            {
-                tracing.Trace("❌ Exception: " + ex.ToString());
-                throw new InvalidPluginExecutionException("Error in SendCaseReplyNotificationPlugin.", ex);
-            }
 
-            tracing.Trace("🏁 Plugin execution completed.");
-        }
-
-        private string GetOrgURL(IOrganizationService service, ITracingService tracing)
-        {
-            var query = new QueryExpression("new_environmentvariable")
+            private string GetOrgURL(IOrganizationService service, ITracingService tracing)
             {
-                ColumnSet = new ColumnSet("new_value"),
-                Criteria = new FilterExpression
+                var query = new QueryExpression("new_environmentvariable")
                 {
-                    Conditions =
+                    ColumnSet = new ColumnSet("new_value"),
+                    Criteria = new FilterExpression
+                    {
+                        Conditions =
                     {
                         new ConditionExpression("new_name", ConditionOperator.Equal, "OrgURL")
                     }
+                    }
+                };
+
+                var result = service.RetrieveMultiple(query);
+                if (result.Entities.Count > 0)
+                {
+                    return result.Entities[0].GetAttributeValue<string>("new_value");
                 }
-            };
 
-            var result = service.RetrieveMultiple(query);
-            if (result.Entities.Count > 0)
-            {
-                return result.Entities[0].GetAttributeValue<string>("new_value");
+                tracing.Trace("❌ OrgURL environment variable not found.");
+                throw new InvalidPluginExecutionException("OrgURL environment variable missing.");
             }
-
-            tracing.Trace("❌ OrgURL environment variable not found.");
-            throw new InvalidPluginExecutionException("OrgURL environment variable missing.");
         }
     }
-}

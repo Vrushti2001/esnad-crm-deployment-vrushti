@@ -31,9 +31,9 @@ namespace CustomerService_Esnad
                 var teamId = teamRef.Id;
 
                 // ✅ Get case title and assigned specialized team
-                var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "new_assignedspecializedteam"));
+                var caseEntity = service.Retrieve("incident", caseId, new ColumnSet("title", "new_assignedspecializedteam","ticketnumber"));
                 string caseTitle = caseEntity.GetAttributeValue<string>("title") ?? "Unknown";
-
+                string ticketNumber = caseEntity.GetAttributeValue<string>("ticketnumber") ?? " ";
                 // ✅ Get the assigned specialized team name
                 string assignedTeamName = " ";
                 if (caseEntity.Contains("new_assignedspecializedteam"))
@@ -112,7 +112,7 @@ namespace CustomerService_Esnad
                 string caseUrl = $"{orgUrl}{caseId}";
                 string imageUrl = "https://feedback-dev.crm-esnad.com/Esnad-Logo.jpg"; // Update with actual logo URL
 
-                string caseTitleHtml = $"<a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{caseTitle}</a>";
+                string caseTitleHtml = $"<a href='{caseUrl}' style='color:#0078d4; font-weight:bold;'>{ticketNumber}</a>";
 
                 string emailBody = $@"
 <html>
@@ -127,7 +127,7 @@ namespace CustomerService_Esnad
 
                 var email = new Entity("email")
                 {
-                    ["subject"] = $"Dear Customer service CRM Officer {caseTitle}",
+                    ["subject"] = $"Customer service CRM Officer",
                     ["description"] = emailBody,
                     ["directioncode"] = true,
                     ["from"] = new EntityCollection(new[] { fromParty }),

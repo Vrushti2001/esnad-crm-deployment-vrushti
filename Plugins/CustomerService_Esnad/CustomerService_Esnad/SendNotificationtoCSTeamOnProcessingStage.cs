@@ -11,7 +11,11 @@ using static System.Net.WebRequestMethods;
 namespace CustomerService_Esnad
 {
     public class SendNotificationtoCSTeamOnProcessingStage : IPlugin
-    {
+    { /// <summary>
+    /// //deactivated thuis 
+    /// </summary>
+    /// <param name="serviceProvider"></param>
+    /// <exception cref="InvalidPluginExecutionException"></exception>
         //On Processing Stage Assign ticket to CST
         public void Execute(IServiceProvider serviceProvider)
         {

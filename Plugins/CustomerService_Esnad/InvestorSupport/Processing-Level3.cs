@@ -12,7 +12,7 @@ namespace InvestorSupport
         {
             // Adjust these if you use different logical names
             private const string NotificationFieldLogicalName = "new_notificationusersprocessingl3";
-            private const string RoleNameToFind = "KI: Relationship Management Sector Head";
+            private const string RoleNameToFind = "KI: Sector Head"; //"KI: Relationship Management Sector Head";
             // private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Dev KI: Relationship Management Officer
             // private static readonly Guid RoleIdToFind = new Guid("DC3D719B-B8BF-F011-A42C-F76DBBE58AA4");//Prod KI: Relationship Management Officer
             private const int SafeMaxRecipientsLength = 5000; // truncate recipients string safely
